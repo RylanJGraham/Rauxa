@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
     View, 
     Text, 
@@ -10,22 +10,29 @@ import {
     StyleSheet,
     Button,
 } from 'react-native';
-import { useAuth } from '../hooks/useAuth';
-import Icon from 'react-native-vector-icons/Feather';
-import { LinearGradient } from 'expo-linear-gradient';  // Changed to expo-linear-gradient
 import { useNavigation } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/Feather';
+import { LinearGradient } from 'expo-linear-gradient';
+import { auth } from '../firebase';  // Firebase import
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 const LoginScreen = () => {
-  const navigation = useNavigation();
+    const navigation = useNavigation();
+    
+    // State for user input
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
 
-    const socialIcons = [
-        { name: 'Apple', icon: require('../assets/login/apps/apple.png')  },
-        { name: 'Google', color: '#DB4437' },
-        { name: 'Facebook', color: '#4267B2' },
-        { name: 'GitHub', color: '#333' },
-    ];
-
-    const { signInWithGoogle } = useAuth();
+    // Handle login with Firebase
+    const handleLogin = async () => {
+        setError(''); // Clear previous errors
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+            setError(err.message); // Show error message if login fails
+        }
+    };
 
     return (
         <LinearGradient
@@ -47,48 +54,48 @@ const LoginScreen = () => {
                     <Text style={[styles.title, { color: 'white' }]}>Welcome Back to Rauxa</Text>
 
                     <View style={styles.formContainer}>
+                        {/* Email Input */}
                         <View style={styles.inputContainer}>
-                            <Icon 
-                                name="user" 
-                                size={20} 
-                                color="#666" 
-                                style={styles.inputIcon} 
-                            />
+                            <Icon name="user" size={20} color="#666" style={styles.inputIcon} />
                             <TextInput
-                                placeholder="Username"
+                                placeholder="Email"
                                 style={styles.input}
                                 placeholderTextColor="#666"
+                                value={email}
+                                onChangeText={setEmail}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
                             />
                         </View>
 
+                        {/* Password Input */}
                         <View style={styles.inputContainer}>
-                            <Icon 
-                                name="lock" 
-                                size={20} 
-                                color="#666" 
-                                style={styles.inputIcon} 
-                            />
+                            <Icon name="lock" size={20} color="#666" style={styles.inputIcon} />
                             <TextInput
                                 placeholder="Password"
                                 style={styles.input}
                                 placeholderTextColor="#666"
                                 secureTextEntry
+                                value={password}
+                                onChangeText={setPassword}
                             />
                         </View>
 
+                        {/* Display Error Message */}
+                        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
                         <Text style={[styles.helpText]}>Forgot Your Password?</Text>
 
-                        <TouchableOpacity style={styles.signUpButton}>
+                        {/* Login Button */}
+                        <TouchableOpacity style={styles.signUpButton} onPress={handleLogin}>
                             <Text style={styles.signUpButtonText}>Login</Text>
                         </TouchableOpacity>
 
+                        {/* Signup Navigation */}
                         <View style={styles.bottomTextContainer}>
                             <Text style={styles.bottomText}>Don't Have an Account? </Text>
                             <TouchableOpacity>
-                                <Button 
-                                    title="Create" 
-                                    onPress={() => navigation.navigate("SignUp")}>
-                                </Button>
+                                <Button title="Create" onPress={() => navigation.navigate("SignUp")} />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -164,32 +171,6 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: '600',
     },
-    dividerText: {
-        textAlign: 'center',
-        color: '#FBFCFF',
-        marginVertical: 24,
-    },
-    socialButtonsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        gap: 12,
-    },
-    socialButton: {
-        width: '20%',
-        aspectRatio: 1,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        backgroundColor: 'white',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 12,
-    },
-    socialIcon: {
-        width: '100%',
-        height: '100%',
-    },
     bottomTextContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -206,11 +187,11 @@ const styles = StyleSheet.create({
       textAlign: 'right',
       marginBottom: 12,
   },
-    signInLink: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
-    },
+    errorText: {
+        color: 'red',
+        textAlign: 'center',
+        marginVertical: 8,
+    }
 });
 
 export default LoginScreen;

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState }  from 'react';
 import { 
     View, 
     Text, 
@@ -14,10 +14,19 @@ import { useAuth } from '../hooks/useAuth';
 import Icon from 'react-native-vector-icons/Feather';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth, db } from '../firebase'; // Import Firebase authentication & Firestore
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 const SignUpScreen = () => {
     const navigation = useNavigation();
     const { signInWithGoogle, signInWithGithub } = useAuth(); // ⬅️ Added GitHub auth
+
+     // State variables for form inputs
+     const [username, setUsername] = useState('');
+     const [email, setEmail] = useState('');
+     const [mobile, setMobile] = useState('');
+     const [password, setPassword] = useState('');
 
     const socialIcons = [
         { name: 'Apple', icon: require('../assets/login/apps/apple.png'), action: () => {} },
@@ -26,6 +35,52 @@ const SignUpScreen = () => {
         { name: 'GitHub', icon: require('../assets/login/apps/github.png'), action: signInWithGithub }, // ⬅️ GitHub button
         { name: 'X', icon: require('../assets/login/apps/x.png'), action: () => {} },
     ];
+
+    const handleSignUp = async () => {
+        if (!username || !email || !mobile || !password) {
+            Alert.alert('Error', 'All fields are required!');
+            return;
+        }
+    
+        try {
+            // Check if username or email already exists
+            const usersRef = collection(db, 'users');
+            const q = query(usersRef, where('username', '==', username));
+            const emailQuery = query(usersRef, where('email', '==', email));
+    
+            const usernameSnapshot = await getDocs(q);
+            const emailSnapshot = await getDocs(emailQuery);
+    
+            if (!usernameSnapshot.empty) {
+                Alert.alert('Error', 'Username is already taken.');
+                return;
+            }
+    
+            if (!emailSnapshot.empty) {
+                Alert.alert('Error', 'An account with this email already exists.');
+                return;
+            }
+    
+            // Create user in Firebase Authentication
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+    
+            // Store additional user details in Firestore
+            await setDoc(doc(db, 'users', user.uid), {
+                username,
+                email,
+                mobile,
+                uid: user.uid,
+                onboarded: false, // New field to track onboarding status
+            });
+            
+    
+            Alert.alert('Success', 'Account created successfully!');
+            navigation.navigate('Login'); // Navigate to Login after success
+        } catch (error) {
+            Alert.alert('Sign Up Failed', error.message);
+        }
+    };
 
     return (
         <LinearGradient
@@ -47,9 +102,15 @@ const SignUpScreen = () => {
                     <Text style={[styles.title, { color: 'white' }]}>Create Your Rauxa Account</Text>
 
                     <View style={styles.formContainer}>
-                        <View style={styles.inputContainer}>
+                    <View style={styles.inputContainer}>
                             <Icon name="user" size={20} color="#666" style={styles.inputIcon} />
-                            <TextInput placeholder="Username" style={styles.input} placeholderTextColor="#666" />
+                            <TextInput 
+                                placeholder="Username" 
+                                style={styles.input} 
+                                placeholderTextColor="#666" 
+                                value={username}
+                                onChangeText={setUsername}
+                            />
                         </View>
 
                         <View style={styles.inputContainer}>
@@ -60,6 +121,8 @@ const SignUpScreen = () => {
                                 placeholderTextColor="#666"
                                 keyboardType="email-address"
                                 autoCapitalize="none"
+                                value={email}
+                                onChangeText={setEmail}
                             />
                         </View>
 
@@ -70,16 +133,25 @@ const SignUpScreen = () => {
                                 style={styles.input}
                                 placeholderTextColor="#666"
                                 keyboardType="phone-pad"
+                                value={mobile}
+                                onChangeText={setMobile}
                             />
                         </View>
 
                         <View style={styles.inputContainer}>
                             <Icon name="lock" size={20} color="#666" style={styles.inputIcon} />
-                            <TextInput placeholder="Password" style={styles.input} placeholderTextColor="#666" secureTextEntry />
+                            <TextInput
+                                placeholder="Password"
+                                style={styles.input}
+                                placeholderTextColor="#666"
+                                secureTextEntry
+                                value={password}
+                                onChangeText={setPassword}
+                            />
                         </View>
 
-                        <TouchableOpacity style={styles.signUpButton}>
-                            <Text style={styles.signUpButtonText}>SignUp</Text>
+                        <TouchableOpacity style={styles.signUpButton} onPress={handleSignUp}>
+                            <Text style={styles.signUpButtonText}>Sign Up</Text>
                         </TouchableOpacity>
 
                         <Text style={styles.dividerText}>or create an account using</Text>
