@@ -20,6 +20,9 @@
       "scheme": "rauxa",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -29,7 +32,8 @@
       },
       "package": "host.exp.exponent",
       "scheme": "rauxa",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,6 +43,9 @@
         "projectId": "8992777b-78d8-475d-bb83-21aa5d3b576e"
       }
     },
-    "scheme": "rauxa"
+    "scheme": "rauxa",
+    "updates": {
+      "url": "https://u.expo.dev/8992777b-78d8-475d-bb83-21aa5d3b576e"
+    }
   }
 }

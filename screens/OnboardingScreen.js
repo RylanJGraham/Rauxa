@@ -18,9 +18,9 @@ const OnboardingScreen = () => {
     const updateOnboardingStatus = async () => {
         if (auth.currentUser) {
             const userRef = doc(db, "users", auth.currentUser.uid);
-            await updateDoc(userRef, { onboarded: true });
+            await updateDoc(userRef, { onboarded: false }); // Set onboarded to false initially
         }
-        navigation.replace("Home");
+        navigation.navigate("ProfileSetup"); // Navigate to ProfileSetup
     };
 
     const handleNext = () => {

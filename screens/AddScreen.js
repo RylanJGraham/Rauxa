@@ -6,7 +6,7 @@ import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
 import { LinearGradient } from "expo-linear-gradient";
 
-const HomeScreen = () => {
+const AddScreen = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
 
@@ -53,4 +53,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+export default AddScreen;
