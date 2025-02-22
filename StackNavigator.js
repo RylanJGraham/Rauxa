@@ -22,99 +22,133 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const HomeTabs = () => {
-  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
-        screenOptions={{
-          tabBarStyle: {
-            position: "absolute",
-            bottom: 20, // Adjust based on platform
-            borderRadius: 50,
-            backgroundColor: "#0367A6",
-            height: 75,
-            shadowColor: "#000",
-            shadowOpacity: 0.1,
-            shadowRadius: 10,
-            elevation: 5,
-            paddingHorizontal: 10,
-            marginHorizontal: 10,
-            overflow: 'hidden',
-          },
-          tabBarItemStyle: {
-            padding: 0,
-            margin: 0,
-            height: '100%',
-            alignItems: 'center',
-            justifyContent: 'center',
-          },
-          tabBarActiveTintColor: "#ffffff",
-          tabBarShowLabel: true,
-          headerShown: false,
+      screenOptions={({ route }) => ({
+        tabBarStyle: {
+          position: "absolute",
+          bottom: 20,
+          borderRadius: 50,
+          backgroundColor: "#0367A6",
+          height: 60,
+          shadowColor: "#000",
+          shadowOpacity: 0.1,
+          shadowRadius: 10,
+          elevation: 5,
+          paddingHorizontal: 10,
+          marginHorizontal: 60,
+          overflow: "hidden",
+        },
+        tabBarItemStyle: {
+          padding: 15,
+          margin: 0,
+          height: "100%",
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        tabBarActiveTintColor: "#ffffff",
+        tabBarShowLabel: false,
+        headerShown: false,
+      })}
+    >
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ alignItems: "center", justifyContent: "center" }}>
+              {focused && (
+                <View
+                  style={{
+                    position: "absolute",
+                    width: 50,
+                    height: 50,
+                    borderRadius: 25,
+                    backgroundColor: "#F2BB47",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                />
+              )}
+              <Ionicons name="home" size={30} color={color} />
+            </View>
+          ),
         }}
-      >
-    <Tab.Screen
-      name="Home"
-      component={HomeScreen}
-      options={{
-        tabBarIcon: ({ color }) => (
-          <View style={{ 
-            height: 120, 
-            width: 120,
-            alignItems: 'center', 
-            justifyContent: 'center',
-          }}>
-            <Ionicons name="home" size={40} color={color} />
-          </View>
-        ),
-      }}
-    />
-    <Tab.Screen
-      name="Chat"
-      component={ChatScreen}
-      options={{
-        tabBarIcon: ({ color }) => (
-          <View style={{ 
-            height: 75, 
-            alignItems: 'center', 
-            justifyContent: 'center',
-          }}>
-            <Ionicons name="chatbubble" size={28} color={color} />
-          </View>
-        ),
-      }}
-    />
-    <Tab.Screen
-      name="Add"
-      component={AddScreen}
-      options={{
-        tabBarIcon: ({ color }) => (
-          <View style={{ 
-            height: 75, 
-            alignItems: 'center', 
-            justifyContent: 'center',
-          }}>
-            <Ionicons name="add-circle" size={34} color={color} />
-          </View>
-        ),
-      }}
-    />
-    <Tab.Screen
-      name="Profile"
-      component={ProfileScreen}
-      options={{
-        tabBarIcon: ({ color }) => (
-          <View style={{ 
-            height: 75, 
-            alignItems: 'center', 
-            justifyContent: 'center',
-          }}>
-            <Ionicons name="person" size={28} color={color} />
-          </View>
-        ),
-      }}
-    />
-  </Tab.Navigator>
+      />
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ alignItems: "center", justifyContent: "center" }}>
+              {focused && (
+                <View
+                  style={{
+                    position: "absolute",
+                    width: 50,
+                    height: 50,
+                    borderRadius: 25,
+                    backgroundColor: "#F2BB47",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                />
+              )}
+              <Ionicons name="chatbubble" size={30} color={color} />
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Add"
+        component={AddScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ alignItems: "center", justifyContent: "center" }}>
+              {focused && (
+                <View
+                  style={{
+                    position: "absolute",
+                    width: 50,
+                    height: 50,
+                    borderRadius: 25,
+                    backgroundColor: "#F2BB47",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                />
+              )}
+              <Ionicons name="add-circle" size={30} color={color} />
+            </View>
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color, focused }) => (
+            <View style={{ alignItems: "center", justifyContent: "center" }}>
+              {focused && (
+                <View
+                  style={{
+                    position: "absolute",
+                    width: 50,
+                    height: 50,
+                    borderRadius: 25,
+                    backgroundColor: "#F2BB47",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                />
+              )}
+              <Ionicons name="person" size={30} color={color} />
+            </View>
+          ),
+        }}
+      />
+    </Tab.Navigator>
   );
 };
 
@@ -158,41 +192,44 @@ const StackNavigator = () => {
 
   return (
     <Stack.Navigator>
-      {user ? (
-        !onboarded ? (
-          <>
-            <Stack.Screen
-              name="Onboarding"
-              component={OnboardingScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="ProfileSetup"
-              component={ProfileSetupScreen}
-              options={{ headerShown: false }}
-            />
-          </>
+      <>
+        {user ? (
+            !onboarded ? (
+                <>
+                    <Stack.Screen
+                        name="Onboarding"
+                        component={OnboardingScreen}
+                        options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                        name="ProfileSetup"
+                        component={ProfileSetupScreen}
+                        options={{ headerShown: false }}
+                    />
+                </>
+            ) : (
+                <Stack.Screen
+                    name="Home"
+                    component={HomeTabs}
+                    options={{ headerShown: false }}
+                />
+            )
         ) : (
-          <Stack.Screen
-            name="Home"
-            component={HomeTabs}
-            options={{ headerShown: false }}
-          />
-        )
-      ) : (
-        <>
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="SignUp"
-            component={SignUpScreen}
-            options={{ headerShown: false }}
-          />
-        </>
-      )}
+            <>
+                <Stack.Screen
+                    name="Login"
+                    component={LoginScreen}
+                    options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                    name="SignUp"
+                    component={SignUpScreen}
+                    options={{ headerShown: false }}
+                />
+            </>
+        
+        )}
+      </>
     </Stack.Navigator>
   );
 };
