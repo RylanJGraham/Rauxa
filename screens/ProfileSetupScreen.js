@@ -137,7 +137,7 @@ const ProfileSetupScreen = () => {
 
             await setDoc(userRef, { onboarded: true }, { merge: true });
 
-            navigation.replace("Home");
+            navigation.replace("Main");
         }
 
     };
