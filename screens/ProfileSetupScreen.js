@@ -114,32 +114,37 @@ const ProfileSetupScreen = () => {
     };
 
     const handleBioChange = (text) => {
+        console.log("Bio updated:", text);
         if (text.length <= 500) {
             setProfileData({ ...profileData, bio: text });
         }
     };
-
+    
     const completeProfileSetup = async () => {
         if (auth.currentUser) {
-            const userRef = doc(db, "users", auth.currentUser.uid);
-            const profileRef = doc(collection(userRef, "ProfileInfo"), "userinfo");
-
-            await setDoc(profileRef, {
-                displayFirstName: profileData.displayFirstName,
-                displayLastName: profileData.displayLastName,
-                age: profileData.age,
-                gender: profileData.gender,
-                interests: profileData.interests,
-                bio: profileData.bio,
-                profileImages: profileData.profileImages,
-                createdAt: new Date(),
-            });
-
-            await setDoc(userRef, { onboarded: true }, { merge: true });
-
-            navigation.replace("Main");
+            try {
+                const userRef = doc(db, "users", auth.currentUser.uid);
+                const profileRef = doc(collection(userRef, "ProfileInfo"), "userinfo");
+    
+                await setDoc(profileRef, {
+                    displayFirstName: profileData.displayFirstName,
+                    displayLastName: profileData.displayLastName,
+                    age: profileData.age,
+                    gender: profileData.gender,
+                    interests: profileData.interests,
+                    bio: profileData.bio,
+                    profileImages: profileData.profileImages,
+                    createdAt: new Date(),
+                });
+    
+                await setDoc(userRef, { onboarded: true }, { merge: true });
+    
+                console.log("Profile setup complete. Navigating to Main...");
+                navigation.replace("Main");
+            } catch (error) {
+                console.error("Error completing profile setup:", error);
+            }
         }
-
     };
 
     const handleGenderSelect = (gender) => {

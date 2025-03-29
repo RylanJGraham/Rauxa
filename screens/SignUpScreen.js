@@ -1,4 +1,5 @@
 import React, { useState }  from 'react';
+import { Alert } from 'react-native';
 import { 
     View, 
     Text, 
@@ -37,6 +38,7 @@ const SignUpScreen = () => {
     ];
 
     const handleSignUp = async () => {
+        console.log("Sign Up Button Pressed!");  // Debugging line
         if (!username || !email || !mobile || !password) {
             Alert.alert('Error', 'All fields are required!');
             return;
@@ -78,6 +80,7 @@ const SignUpScreen = () => {
             Alert.alert('Success', 'Account created successfully!');
             navigation.navigate('Login'); // Navigate to Login after success
         } catch (error) {
+            console.log("Firebase Error:", error);  // Log error in Expo Go
             Alert.alert('Sign Up Failed', error.message);
         }
     };
