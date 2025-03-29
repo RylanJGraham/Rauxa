@@ -2,29 +2,44 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 
-const EditableField = ({ title, value, onEdit, onChangeText, isMultiline, keyboardType }) => {
+const EditableField = ({ 
+  title, 
+  value, 
+  isEditing, 
+  onEdit, 
+  onChangeText, 
+  isMultiline, 
+  keyboardType 
+}) => {
   return (
     <View style={styles.section}>
       <View style={styles.header}>
         <Text style={styles.title}>{title}</Text>
-        <TouchableOpacity onPress={onEdit} style={styles.editButton}>
+        <TouchableOpacity 
+          onPress={onEdit} 
+          style={[styles.editButton, isEditing && styles.editButtonActive]}
+        >
           <FontAwesome name="pencil" size={18} color="white" />
         </TouchableOpacity>
       </View>
-      {isMultiline ? (
-        <TextInput
-          style={[styles.input, styles.bioInput]}
-          value={value}
-          onChangeText={onChangeText}
-          multiline
-        />
+      {isEditing ? (
+        isMultiline ? (
+          <TextInput
+            style={[styles.input, styles.bioInput]}
+            value={value}
+            onChangeText={onChangeText}
+            multiline
+          />
+        ) : (
+          <TextInput
+            style={styles.input}
+            value={value}
+            onChangeText={onChangeText}
+            keyboardType={keyboardType}
+          />
+        )
       ) : (
-        <TextInput
-          style={styles.input}
-          value={value}
-          onChangeText={onChangeText}
-          keyboardType={keyboardType}
-        />
+        <Text style={styles.valueText}>{value}</Text>
       )}
     </View>
   );
@@ -32,8 +47,8 @@ const EditableField = ({ title, value, onEdit, onChangeText, isMultiline, keyboa
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 20,
-    paddingBottom: 10,
+    marginBottom: 10,
+    paddingBottom: 0,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.2)',
   },
@@ -52,6 +67,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 8,
   },
+  editButtonActive: {
+    backgroundColor: '#D9043D',
+  },
   input: {
     borderWidth: 2,
     borderColor: '#F2BB47',
@@ -67,6 +85,13 @@ const styles = StyleSheet.create({
   bioInput: {
     height: 80,
     textAlignVertical: 'top',
+  },
+  valueText: {
+    color: 'white',
+    fontSize: 16,
+    marginTop: 0,
+    marginBottom: 0,
+    padding: 8,
   },
 });
 

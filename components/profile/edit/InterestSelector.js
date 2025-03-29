@@ -9,7 +9,6 @@ const InterestsSelector = ({ selectedInterests, onInterestSelect }) => {
 
   return (
     <View style={styles.section}>
-      <Text style={styles.title}>Interests</Text>
       <View style={styles.selectionContainer}>
         {interestsOptions.map((interest) => (
           <TouchableOpacity
@@ -30,10 +29,8 @@ const InterestsSelector = ({ selectedInterests, onInterestSelect }) => {
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    marginBottom: 0,
+    paddingBottom: 0,
   },
   title: {
     color: 'white',
@@ -44,7 +41,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 0,
   },
   bubbleContainer: {
     padding: 8,

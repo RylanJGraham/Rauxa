@@ -9,7 +9,7 @@ import ProfileEdit from "../components/profile/ProfileEdit";
 
 const ProfileScreen = () => {
     const [profileData, setProfileData] = useState(null);
-    const [viewMode, setViewMode] = useState("profile"); // "profile" or "edit"
+    const [viewMode, setViewMode] = useState("profile");
     const [activeIndex, setActiveIndex] = useState(0);
 
     useEffect(() => {
@@ -19,7 +19,17 @@ const ProfileScreen = () => {
                 const userSnap = await getDoc(userRef);
 
                 if (userSnap.exists()) {
-                    setProfileData(userSnap.data());
+                    const data = userSnap.data();
+                    // Initialize education field if it doesn't exist
+                    if (!data.education) {
+                        data.education = {
+                            university: "",
+                        };
+                    }
+                    if (!data.languages) {
+                        data.languages = [];
+                      }
+                    setProfileData(data);
                 }
             }
         };
@@ -29,17 +39,20 @@ const ProfileScreen = () => {
     const handleSaveProfile = async (updatedProfile) => {
         if (auth.currentUser) {
             const userRef = doc(db, "users", auth.currentUser.uid, "ProfileInfo", "userinfo");
-    
-            // Add topSongs if it doesn't exist
-            if (!updatedProfile.topSongs) {
-                updatedProfile.topSongs = [];
-            }
-    
-            await updateDoc(userRef, updatedProfile);
-            setProfileData((prevData) => ({
-                ...prevData,
+            
+            // Ensure all fields exist
+            const completeProfile = {
                 ...updatedProfile,
-            }));
+                education: updatedProfile.education || {
+                    university: "",
+                    graduationYear: ""
+                },
+                languages: updatedProfile.languages || [],
+                topSongs: updatedProfile.topSongs || []
+            };
+
+            await updateDoc(userRef, completeProfile);
+            setProfileData(completeProfile);
         }
     };
 
@@ -53,12 +66,10 @@ const ProfileScreen = () => {
 
     return (
         <LinearGradient colors={["#0367A6", "#012840"]} style={styles.container}>
-            {/* Top Row: Settings | Profile Buttons | Stats */}
             <View style={styles.topRow}>
                 <ProfileButtons setViewMode={setViewMode} viewMode={viewMode} />
             </View>
 
-            {/* Profile Image Gallery (Only in View Mode) */}
             {viewMode === "profile" && (
                 <ProfileImageGallery
                     profileData={profileData}
@@ -67,7 +78,6 @@ const ProfileScreen = () => {
                 />
             )}
 
-            {/* Scrollable Content for Profile Editing */}
             {viewMode === "edit" && (
                 <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
                     <ProfileEdit profileData={profileData} onSaveProfile={handleSaveProfile} />

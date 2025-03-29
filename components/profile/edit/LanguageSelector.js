@@ -1,25 +1,27 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 
-const GenderSelector = ({ selectedGender, onGenderSelect }) => {
-  const genderOptions = [
-    'Male', 'Female', 'Non-Binary', 'Genderqueer', 'Genderfluid', 'Agender', 'Bigender',
-    'Two-Spirit', 'Other',
+const LanguagesSelector = ({ selectedLanguages, onLanguageSelect }) => {
+  const languageOptions = [
+    'English', 'Spanish', 'French', 'German', 'Catalan', 'Chinese', 
+    'Japanese', 'Korean', 'Italian', 'Portuguese', 'Russian',
+    'Arabic', 'Hindi', 'Bengali', 'Turkish', 'Dutch',
+    'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Polish'
   ];
 
   return (
     <View style={styles.section}>
       <View style={styles.selectionContainer}>
-        {genderOptions.map((gender) => (
+        {languageOptions.map((language) => (
           <TouchableOpacity
-            key={gender}
+            key={language}
             style={[
               styles.bubbleContainer,
-              selectedGender === gender && styles.selectedBubble,
+              selectedLanguages.includes(language) && styles.selectedBubble,
             ]}
-            onPress={() => onGenderSelect(gender)}
+            onPress={() => onLanguageSelect(language)}
           >
-            <Text style={styles.bubbleText}>{gender}</Text>
+            <Text style={styles.bubbleText}>{language}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -31,11 +33,6 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 0,
     paddingBottom: 0,
-  },
-  title: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   selectionContainer: {
     flexDirection: 'row',
@@ -62,4 +59,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default GenderSelector;
+export default LanguagesSelector;
