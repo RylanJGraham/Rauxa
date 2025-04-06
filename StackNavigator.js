@@ -11,6 +11,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from "react-native";
 
+import SplashScreen from './screens/SplashScreen';
+
+
 // Tab image imports
 import ChatActiveIcon from "./assets/tabs/Message-Active.png";
 import ChatInactiveIcon from "./assets/tabs/Message.png";
@@ -179,7 +182,7 @@ const StackNavigator = () => {
                 </>
             ) : (
                 <Stack.Screen
-                    name="Home"
+                    name="Main"
                     component={HomeTabs}
                     options={{ headerShown: false }}
                 />
