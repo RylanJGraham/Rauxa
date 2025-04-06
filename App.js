@@ -1,18 +1,17 @@
-import React from "react";
-import StackNavigator from "./StackNavigator";
-import { NavigationContainer } from "@react-navigation/native";
-import { AuthProvider } from "./hooks/useAuth";
-import { LogBox } from "react-native";
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { AuthProvider } from './hooks/useAuth';
+import RootNavigator from './navigation/RootNavigator';
+import { LogBox } from 'react-native';
 
+// Ignore all log notifications
 LogBox.ignoreAllLogs();
 
 export default function App() {
   return (
     <NavigationContainer>
-      {/* HOC- Higher Order Component */}
       <AuthProvider>
-        {/* Injects Auth */}
-        <StackNavigator/>
+        <RootNavigator />
       </AuthProvider>
     </NavigationContainer>
   );

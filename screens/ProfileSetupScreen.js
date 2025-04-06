@@ -140,7 +140,7 @@ const ProfileSetupScreen = () => {
                 await setDoc(userRef, { onboarded: true }, { merge: true });
     
                 console.log("Profile setup complete. Navigating to Main...");
-                navigation.replace("Home");
+                navigation.replace("App");
             } catch (error) {
                 console.error("Error completing profile setup:", error);
             }
