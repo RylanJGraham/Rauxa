@@ -3,6 +3,8 @@ import StackNavigator from "./StackNavigator";
 import { NavigationContainer } from "@react-navigation/native";
 import { AuthProvider } from "./hooks/useAuth";
 import { LogBox } from "react-native";
+import 'react-native-reanimated';
+
 LogBox.ignoreAllLogs();
 
 export default function App() {

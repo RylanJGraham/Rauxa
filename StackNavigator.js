@@ -8,8 +8,22 @@ import { db } from "./firebase";
 import { View, ActivityIndicator, Text, Platform } from "react-native";
 import { Ionicons } from "react-native-vector-icons";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from "react-native";
 
-import HomeScreen from "./screens/HomeScreen";
+// Tab image imports
+import ChatActiveIcon from "./assets/tabs/Message-Active.png";
+import ChatInactiveIcon from "./assets/tabs/Message.png";
+import AddActiveIcon from "./assets/tabs/Add-Active.png";
+import AddInactiveIcon from "./assets/tabs/Add.png";
+import ProfileActiveIcon from "./assets/tabs/Profile-Active.png";
+import ProfileInactiveIcon from "./assets/tabs/Profile.png";
+import MainActiveIcon from "./assets/tabs/Home-Active.png";
+import MainInactiveIcon from "./assets/tabs/Home.png";
+
+
+
+import MatchScreen from "./screens/EventSwipeScreen";
 import ChatScreen from "./screens/ChatScreen";
 import LoginScreen from "./screens/LoginScreen";
 import SignUpScreen from "./screens/SignUpScreen";
@@ -22,57 +36,46 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const HomeTabs = () => {
-
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={{
+        tabBarBackground: () => (
+          <LinearGradient
+            colors={['#D9043D', '#0367A6']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={{
+              flex: 1,
+            }}
+          />
+        ),
         tabBarStyle: {
-          position: "absolute",
-          bottom: 20,
-          borderRadius: 50,
-          backgroundColor: "#0367A6",
-          height: 60,
-          shadowColor: "#000",
-          shadowOpacity: 0.1,
-          shadowRadius: 10,
-          elevation: 5,
-          paddingHorizontal: 10,
-          marginHorizontal: 60,
-          overflow: "hidden",
+          height: 80,
+          borderTopWidth: 0,
+          elevation: 1,
+          paddingHorizontal: 20,
+          backgroundColor: 'transparent',
         },
         tabBarItemStyle: {
-          padding: 15,
-          margin: 0,
           height: "100%",
-          alignItems: "center",
-          justifyContent: "center",
+          marginTop: 16,
         },
         tabBarActiveTintColor: "#ffffff",
+        tabBarInactiveTintColor: "#ffffff90",
         tabBarShowLabel: false,
         headerShown: false,
-      })}
+      }}
     >
       <Tab.Screen
         name="Main"
-        component={HomeScreen}
+        component={MatchScreen}
         options={{
-          tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center" }}>
-              {focused && (
-                <View
-                  style={{
-                    position: "absolute",
-                    width: 50,
-                    height: 50,
-                    borderRadius: 25,
-                    backgroundColor: "#F2BB47",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                />
-              )}
-              <Ionicons name="home" size={30} color={color} />
-            </View>
+          tabBarIcon: ({ focused }) => (
+            <Image
+            source={focused ? MainActiveIcon : MainInactiveIcon}
+            style={{ width: 30, height: 30 }}
+            resizeMode="contain"
+          />
           ),
         }}
       />
@@ -81,22 +84,11 @@ const HomeTabs = () => {
         component={ChatScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center" }}>
-              {focused && (
-                <View
-                  style={{
-                    position: "absolute",
-                    width: 50,
-                    height: 50,
-                    borderRadius: 25,
-                    backgroundColor: "#F2BB47",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                />
-              )}
-              <Ionicons name="chatbubble" size={30} color={color} />
-            </View>
+            <Image
+            source={focused ? ChatActiveIcon : ChatInactiveIcon}
+            style={{ width: 35, height: 35 }}
+            resizeMode="contain"
+          />
           ),
         }}
       />
@@ -105,22 +97,11 @@ const HomeTabs = () => {
         component={AddScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center" }}>
-              {focused && (
-                <View
-                  style={{
-                    position: "absolute",
-                    width: 50,
-                    height: 50,
-                    borderRadius: 25,
-                    backgroundColor: "#F2BB47",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                />
-              )}
-              <Ionicons name="add-circle" size={30} color={color} />
-            </View>
+            <Image
+            source={focused ? AddActiveIcon : AddInactiveIcon}
+            style={{ width: 30, height: 30 }}
+            resizeMode="contain"
+          />
           ),
         }}
       />
@@ -129,22 +110,11 @@ const HomeTabs = () => {
         component={ProfileScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
-            <View style={{ alignItems: "center", justifyContent: "center" }}>
-              {focused && (
-                <View
-                  style={{
-                    position: "absolute",
-                    width: 50,
-                    height: 50,
-                    borderRadius: 25,
-                    backgroundColor: "#F2BB47",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                />
-              )}
-              <Ionicons name="person" size={30} color={color} />
-            </View>
+            <Image
+            source={focused ? ProfileActiveIcon : ProfileInactiveIcon}
+            style={{ width: 30, height: 30 }}
+            resizeMode="contain"
+          />
           ),
         }}
       />

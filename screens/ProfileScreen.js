@@ -65,7 +65,7 @@ const ProfileScreen = () => {
     }
 
     return (
-        <LinearGradient colors={["#0367A6", "#012840"]} style={styles.container}>
+        <LinearGradient colors={["#D9B779", "#736140"]} style={styles.container}>
             <View style={styles.topRow}>
                 <ProfileButtons setViewMode={setViewMode} viewMode={viewMode} />
             </View>
