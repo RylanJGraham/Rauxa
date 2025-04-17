@@ -3,12 +3,14 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import TabBarIcon from './TabBarIcon';
 import { styles } from '../styles/styles';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Import screens
 import MatchScreen from '../screens/EventSwipeScreen';
 import ChatScreen from '../screens/ChatScreen';
 import AddScreen from '../screens/AddScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import CreateMeetupScreen from '../screens/CreateMeetupScreen'; // Create Meetup Screen
 
 // Import icons
 import ChatActiveIcon from '../assets/tabs/Message-Active.png';
@@ -21,6 +23,15 @@ import MainActiveIcon from '../assets/tabs/Home-Active.png';
 import MainInactiveIcon from '../assets/tabs/Home.png';
 
 const Tab = createBottomTabNavigator();
+const AddStack = createNativeStackNavigator(); // Stack Navigator for Add Tab
+
+// AddStack Navigator for "Add" tab
+const AddStackNavigator = () => (
+  <AddStack.Navigator>
+    <AddStack.Screen name="Add" component={AddScreen} options={{ headerShown: false, title: 'Create Rauxa' }} />
+    <AddStack.Screen name="CreateMeetup" component={CreateMeetupScreen} options={{ headerShown: false, title: 'Create a Rauxa' }} />
+  </AddStack.Navigator>
+);
 
 const TabNavigator = () => (
   <Tab.Navigator
@@ -65,7 +76,7 @@ const TabNavigator = () => (
     />
     <Tab.Screen 
       name="Add" 
-      component={AddScreen}
+      component={AddStackNavigator}
       options={{
         tabBarIcon: ({ focused }) => (
           <TabBarIcon 

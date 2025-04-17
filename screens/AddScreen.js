@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, StyleSheet, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, StyleSheet, View, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/core";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
@@ -20,6 +20,7 @@ const groupSizes = [2, 4, 6, 10, 20];
 const MeetupScreen = () => {
   const navigation = useNavigation();
   const [recommendedMeetups, setRecommendedMeetups] = useState([]);
+  const [sponsoredMeetups, setSponsoredMeetups] = useState([]);
   const [filteredMeetups, setFilteredMeetups] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTags, setSelectedTags] = useState([]);
@@ -27,21 +28,31 @@ const MeetupScreen = () => {
   const [isFilterVisible, setIsFilterVisible] = useState(false);
 
   useEffect(() => {
-    const fetchRecommendedMeetups = async () => {
+    const fetchMeetups = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "meetups", "Recommended_Meetups", "events"));
-        const data = querySnapshot.docs.map((doc) => ({
+        // Fetch recommended meetups
+        const recommendedSnapshot = await getDocs(collection(db, "meetups", "Recommended_Meetups", "events"));
+        const recommendedData = recommendedSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
         }));
-        setRecommendedMeetups(data);
-        setFilteredMeetups(data);
+        setRecommendedMeetups(recommendedData);
+        setFilteredMeetups(recommendedData);
+
+        // Fetch sponsored meetups
+        const sponsoredSnapshot = await getDocs(collection(db, "meetups", "Sponsored_Meetups", "events"));
+        const sponsoredData = sponsoredSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setSponsoredMeetups(sponsoredData);
       } catch (error) {
-        console.error("Error fetching recommended meetups:", error);
+        console.error("Error fetching meetups:", error);
+        Alert.alert("Error", "Failed to load meetups");
       }
     };
 
-    fetchRecommendedMeetups();
+    fetchMeetups();
   }, []);
 
   const handleSearch = (text) => {
@@ -95,7 +106,6 @@ const MeetupScreen = () => {
         <View style={styles.searchFilterContainer}>
           <SearchBar value={searchTerm} onChangeText={handleSearch} />
           
-          {/* Filter Icon */}
           <TouchableOpacity onPress={toggleFilterVisibility} style={styles.filterButton}>
             <Ionicons 
               name="filter" 
@@ -105,7 +115,6 @@ const MeetupScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Conditional Filter Section */}
         {isFilterVisible && (
           <View style={styles.filterSection}>
             <FilterModal
@@ -120,6 +129,21 @@ const MeetupScreen = () => {
           </View>
         )}
 
+        <Text style={styles.title}>Sponsored Meetups</Text>
+        {sponsoredMeetups.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
+            {sponsoredMeetups.map((item) => (
+              <EventCard
+                key={item.id}
+                event={item}
+                onPress={() => navigation.navigate("EventDetails", { eventId: item.id })}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={styles.noEventsText}>No sponsored events available, stay tuned!</Text>
+        )}
+
         <Text style={styles.title}>Recommended Meetups</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
           {filteredMeetups.map((item) => (
@@ -130,16 +154,17 @@ const MeetupScreen = () => {
             />
           ))}
         </ScrollView>
-        <Text style={styles.title}>Sponsored Meetups</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
-          {filteredMeetups.map((item) => (
-            <EventCard
-              key={item.id}
-              event={item}
-              onPress={() => navigation.navigate("EventDetails", { eventId: item.id })}
-            />
-          ))}
-        </ScrollView>
+
+        
+
+         {/* Create Meetup Button */}
+         <Text style={styles.title}>Got Your Own Idea?</Text>
+         <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => navigation.navigate('CreateMeetup')}
+        >
+          <Text style={styles.createButtonText}>Create Your Own Meetup!</Text>
+        </TouchableOpacity>
       </ScrollView>
     </LinearGradient>
   );
@@ -176,7 +201,33 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
   },
   filterSection: {
-    marginTop: 0,  // Ensures the filter section pushes content down
+    marginTop: 0,
+  },
+  noEventsText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#FFFFFF80",
+    marginLeft: 25,
+    marginTop: 10,
+  },
+  createButton: {
+    backgroundColor: "#0367A6",
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginTop: 0,
+    paddingVertical: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  createButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
   },
 });
 
