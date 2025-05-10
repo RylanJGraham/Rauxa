@@ -1,55 +1,11 @@
 {
   "expo": {
-    "name": "rauxa",
-    "slug": "rauxa",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "doctor": {
-      "reactNativeDirectoryCheck": {
-        "listUnknownPackages": false
-      }
-    },
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+    "scheme": "rauxa",
+    "android": {
+      "package": "com.yourcompany.rauxa"
     },
     "ios": {
-      "supportsTablet": true,
-      "usesAppleSignIn": true,
-      "googleServicesFile": "./GoogleService-Info.plist",
-      "bundleIdentifier": "host.exp.exponent",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      },
-      "runtimeVersion": {
-        "policy": "appVersion"
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "package": "host.exp.exponent",
-      "googleServicesFile": "./google-services.json",
-      "runtimeVersion": "1.0.0"
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "8992777b-78d8-475d-bb83-21aa5d3b576e"
-      }
-    },
-    "scheme": "rauxa",
-    "platforms": ["ios", "android"],
-    "updates": {
-      "url": "https://u.expo.dev/8992777b-78d8-475d-bb83-21aa5d3b576e"
+      "bundleIdentifier": "com.yourcompany.rauxa"
     }
   }
 }

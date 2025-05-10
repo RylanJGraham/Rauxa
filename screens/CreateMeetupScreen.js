@@ -9,22 +9,29 @@ import { Ionicons } from '@expo/vector-icons'; // Import back button icon
 import EditableFieldEvent from '../components/particles/EditableFieldEvent'; // Adjust path as needed
 import EditableDateTimeRow from '../components/particles/EditableDateTimeRow';
 import axios from 'axios';
+import { useRoute } from "@react-navigation/native";
+
 
 const { width } = Dimensions.get('window'); // Get screen width
 
 const CreateMeetupScreen = () => {
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState(new Date());
-  const [time, setTime] = useState('');
-  const [groupSize, setGroupSize] = useState('');
-  const [location, setLocation] = useState('');
-  const [tags, setTags] = useState([]);
-  const [photos, setPhotos] = useState([require('../assets/default.jpg')]); // Default image as placeholder
-  const [activeIndex, setActiveIndex] = useState(0); // To track the active image in gallery
+  const route = useRoute();
+  const { mode, eventData } = route.params || {};
 
-  const [pixabayImages, setPixabayImages] = useState([]);
-  const [pixabaySearch, setPixabaySearch] = useState('');
+  const [title, setTitle] = useState(eventData?.title || '');
+  const [date, setDate] = useState(eventData?.date ? new Date(eventData.date) : new Date());
+  const [time, setTime] = useState(eventData?.time || '');
+  const [groupSize, setGroupSize] = useState(eventData?.groupSize?.toString() || '');
+  const [location, setLocation] = useState(eventData?.location || '');
+  const [tags, setTags] = useState(eventData?.tags || []);
+  const [photos, setPhotos] = useState(
+    eventData?.photos?.length ? eventData.photos : [require('../assets/default.jpg')]
+  );
   const [isPixabayModalVisible, setIsPixabayModalVisible] = useState(false);
+  const [pixabaySearch, setPixabaySearch] = useState('');
+  const [pixabayImages, setPixabayImages] = useState([]);
+
+  const [activeIndex, setActiveIndex] = useState(0);
 
   const fetchPixabayImages = async (query) => {
     if (!query) return;

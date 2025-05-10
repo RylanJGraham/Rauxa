@@ -1,7 +1,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import SplashScreen from '../screens/SplashScreen';
-import AppNavigator from './AppNavigator';
+import SplashScreen from '../screens/SplashScreen';  // This will show during the app loading
+import AppNavigator from './AppNavigator';  // The main app screen
 
 const Stack = createNativeStackNavigator();
 

@@ -32,6 +32,8 @@ const EditableFieldEvent = ({
             value={value}
             onChangeText={onChangeText}
             multiline
+            placeholder={`Enter ${title}`}
+            placeholderTextColor="#A9A9A9"
           />
         ) : (
           <TextInput
@@ -39,6 +41,8 @@ const EditableFieldEvent = ({
             value={value}
             onChangeText={onChangeText}
             keyboardType={keyboardType}
+            placeholder={`Enter ${title}`}
+            placeholderTextColor="#A9A9A9"
           />
         )
       ) : (
@@ -50,54 +54,55 @@ const EditableFieldEvent = ({
 
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 10,
-    paddingHorizontal: 12, // Add padding on the sides
-    paddingBottom: 0,
+    marginBottom: 20,
+    paddingHorizontal: 15, // Increased padding for a spacious feel
+    paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+    borderBottomColor: '#D9D9D9', // Light grey border
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 5,
   },
   title: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    color: '#333', // Dark grey color for better contrast
+    fontSize: 20,
+    fontWeight: '600',
     flex: 1,
     paddingRight: 10, // Prevent title from clashing with button
   },
   editButton: {
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 15,
-    padding: 8,
+    backgroundColor: '#007BFF', // Blue color for edit button
+    borderRadius: 25,
+    padding: 10,
   },
   editButtonActive: {
-    backgroundColor: '#D9043D',
+    backgroundColor: '#28a745', // Green when active (for confirmation of edits)
   },
   input: {
-    borderWidth: 2,
-    borderColor: '#F2BB47',
+    borderWidth: 1.5,
+    borderColor: '#007BFF', // Blue border for input
     borderRadius: 10,
-    backgroundColor: '#00000040',
-    color: 'white',
+    backgroundColor: '#F8F9FA', // Light grey background for input field
+    color: '#333', // Dark text for readability
     textAlign: 'left',
     fontSize: 16,
-    marginBottom: 10,
-    marginTop: 5,
-    padding: 8,
+    padding: 12,
+    marginBottom: 15,
+    marginTop: 8,
   },
   bioInput: {
-    height: 80,
+    height: 100, // Increased height for multiline bio input
     textAlignVertical: 'top',
   },
   valueText: {
-    color: 'white',
+    color: '#333', // Dark text for value display
     fontSize: 16,
     marginTop: 0,
     marginBottom: 0,
-    padding: 8,
+    padding: 12,
   },
 });
 

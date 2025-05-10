@@ -1,12 +1,32 @@
 import React from "react";
-import { View, Text, ImageBackground, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, ImageBackground, StyleSheet, TouchableOpacity, Platform, Linking } from "react-native";
+import { Ionicons } from '@expo/vector-icons';
 
 const EventCard = ({ event, onPress }) => {
+  const handleOpenLocation = () => {
+    const query = encodeURIComponent(event.location); // e.g. "Sagrada Familia"
+    const url = Platform.select({
+      ios: `http://maps.apple.com/?q=${query}`,
+      android: `geo:0,0?q=${query}`,
+    });
+
+    Linking.openURL(url).catch(err => console.error("Error opening map", err));
+  };
+
   return (
     <TouchableOpacity style={styles.meetupCard} onPress={onPress}>
-      <ImageBackground source={{ uri: event.photos[0] }} style={styles.backgroundImage} imageStyle={{ borderRadius: 10 }}>
+      <ImageBackground
+        source={{ uri: event.photos[0] }}
+        style={styles.backgroundImage}
+        imageStyle={{ borderRadius: 10 }}
+      >
         {/* Dark Overlay */}
         <View style={styles.overlay} />
+
+        {/* Map Button - Top Left */}
+        <TouchableOpacity onPress={handleOpenLocation} style={styles.topLeft}>
+          <Ionicons name="location-sharp" size={28} color="#fff" />
+        </TouchableOpacity>
 
         {/* Group Size - Top Right */}
         <View style={styles.topRight}>
@@ -26,7 +46,7 @@ const EventCard = ({ event, onPress }) => {
 const styles = StyleSheet.create({
   meetupCard: {
     width: 200,
-    height: 180, // Adjust as needed
+    height: 180,
     borderRadius: 10,
     overflow: "hidden",
     marginRight: 15,
@@ -37,20 +57,23 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.4)", // Dark overlay
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     borderRadius: 10,
   },
-  dateText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "bold",
+  topLeft: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    backgroundColor: "#D9B779",
+    padding: 6,
+    borderRadius: 6,
   },
   topRight: {
     position: "absolute",
     top: 10,
     right: 10,
-    backgroundColor: "rgba(255, 69, 58, 0.8)", // A nice red shade
-    paddingVertical: 4,
+    backgroundColor: "rgba(255, 69, 58, 0.8)",
+    paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 5,
   },
@@ -71,7 +94,7 @@ const styles = StyleSheet.create({
   },
   location: {
     color: "#ddd",
-    fontSize: 14,
+    fontSize: 16,
   },
 });
 

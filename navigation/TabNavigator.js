@@ -11,6 +11,7 @@ import ChatScreen from '../screens/ChatScreen';
 import AddScreen from '../screens/AddScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateMeetupScreen from '../screens/CreateMeetupScreen'; // Create Meetup Screen
+import EventDetailsScreen from '../screens/EventDetailsScreen';
 
 // Import icons
 import ChatActiveIcon from '../assets/tabs/Message-Active.png';
@@ -30,6 +31,7 @@ const AddStackNavigator = () => (
   <AddStack.Navigator>
     <AddStack.Screen name="Add" component={AddScreen} options={{ headerShown: false, title: 'Create Rauxa' }} />
     <AddStack.Screen name="CreateMeetup" component={CreateMeetupScreen} options={{ headerShown: false, title: 'Create a Rauxa' }} />
+    <AddStack.Screen name="EventDetails" component={EventDetailsScreen} options={{ headerShown: false, title: "Event Details" }} />
   </AddStack.Navigator>
 );
 
