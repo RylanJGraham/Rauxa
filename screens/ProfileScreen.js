@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { auth, db } from "../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { LinearGradient } from "expo-linear-gradient";
 import ProfileImageGallery from "../components/profile/ProfileImageGallery";
 import ProfileButtons from "../components/profile/ProfileButtons";
 import ProfileEdit from "../components/profile/ProfileEdit";
+import { signOut } from "firebase/auth";
 
 const ProfileScreen = () => {
     const [profileData, setProfileData] = useState(null);
@@ -56,6 +57,16 @@ const ProfileScreen = () => {
         }
     };
 
+    const handleLogout = async () => {
+        try {
+            await signOut(auth);
+            // Navigation would typically be handled here if using React Navigation
+            // For example: navigation.navigate('Login');
+        } catch (error) {
+            console.error("Error signing out: ", error);
+        }
+    };
+
     if (!profileData) {
         return (
             <View style={styles.loadingContainer}>
@@ -68,6 +79,9 @@ const ProfileScreen = () => {
         <LinearGradient colors={["#D9B779", "#736140"]} style={styles.container}>
             <View style={styles.topRow}>
                 <ProfileButtons setViewMode={setViewMode} viewMode={viewMode} />
+                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                    <Text style={styles.logoutText}>Logout</Text>
+                </TouchableOpacity>
             </View>
 
             {viewMode === "profile" && (
@@ -114,6 +128,14 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingBottom: 40,
+    },
+    logoutButton: {
+        padding: 10,
+    },
+    logoutText: {
+        color: "white",
+        fontSize: 16,
+        fontWeight: "bold",
     },
 });
 
