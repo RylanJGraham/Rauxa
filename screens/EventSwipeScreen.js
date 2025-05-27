@@ -1,105 +1,76 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, PanResponder } from 'react-native';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import { LinearGradient } from 'expo-linear-gradient';
-import { FontAwesome } from '@expo/vector-icons';
 import EventCard from '../components/matching/EventCard';
 
 const EventSwipeScreen = () => {
-  const [swipeDirection, setSwipeDirection] = useState(null); // Tracks swipe direction
-  const [opacityAnim] = useState(new Animated.Value(0)); // Opacity for the overlay
-  const [drag, setDrag] = useState(new Animated.ValueXY()); // For swipe movement
-  const [swipedIndex, setSwipedIndex] = useState(0);
-  const events = [ /* Your event data here */ ]; // Event data as per your provided code
+  const [events, setEvents] = useState([]);
+  const [index, setIndex] = useState(0);
+  const position = useRef(new Animated.ValueXY()).current;
 
-  // Create pan responder for handling the swipe gesture
+  useEffect(() => {
+    const fetchEvents = async () => {
+      const snapshot = await getDocs(collection(db, 'live'));
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setEvents(data);
+    };
+    fetchEvents();
+  }, []);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: Animated.event([null, { dx: drag.x, dy: drag.y }], { useNativeDriver: false }),
-      onPanResponderRelease: (e, gestureState) => {
-        if (gestureState.dx > 120) {
-          // Swipe Right
-          handleSwipe('right');
-        } else if (gestureState.dx < -120) {
-          // Swipe Left
-          handleSwipe('left');
+      onPanResponderMove: Animated.event([null, { dx: position.x, dy: position.y }], {
+        useNativeDriver: false,
+      }),
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx > 120) {
+          swipeCard('right');
+        } else if (gesture.dx < -120) {
+          swipeCard('left');
         } else {
-          // Reset position if not swiped enough
-          resetSwipePosition();
+          resetPosition();
         }
       },
     })
   ).current;
 
-  // Handle swipe action (right/left)
-  const handleSwipe = (direction) => {
-    setSwipeDirection(direction);
-
-    // Animate the card off-screen with smooth transition
-    Animated.timing(drag, {
+  const swipeCard = (direction) => {
+    Animated.timing(position, {
       toValue: { x: direction === 'right' ? 500 : -500, y: 0 },
       duration: 300,
       useNativeDriver: true,
-    }).start();
-
-    setTimeout(() => {
-      setSwipedIndex(swipedIndex + 1);
-      resetSwipePosition();
-    }, 300);
+    }).start(() => {
+      position.setValue({ x: 0, y: 0 });
+      setIndex(prev => prev + 1);
+    });
   };
 
-  // Reset swipe position
-  const resetSwipePosition = () => {
-    Animated.spring(drag, {
+  const resetPosition = () => {
+    Animated.spring(position, {
       toValue: { x: 0, y: 0 },
-      friction: 5,
-      tension: 40,
       useNativeDriver: true,
     }).start();
   };
 
-  // Overlay animation based on swipe direction
-  const renderOverlay = () => {
-    if (swipeDirection === 'left') {
-      return (
-        <Animated.View
-          style={[styles.overlayBackground, { backgroundColor: 'rgba(255, 0, 0, 0.2)', opacity: opacityAnim }]}
-        >
-          <FontAwesome name="thumbs-down" size={60} color="white" />
-          <Text style={styles.overlayText}>No Thanks</Text>
-        </Animated.View>
-      );
-    } else if (swipeDirection === 'right') {
-      return (
-        <Animated.View
-          style={[styles.overlayBackground, { backgroundColor: 'rgba(0, 255, 0, 0.2)', opacity: opacityAnim }]}
-        >
-          <FontAwesome name="thumbs-up" size={60} color="white" />
-          <Text style={styles.overlayText}>RSVP'd</Text>
-        </Animated.View>
-      );
-    }
-    return null;
-  };
+  if (index >= events.length) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.doneText}>No more events 🎉</Text>
+      </View>
+    );
+  }
 
   return (
     <LinearGradient colors={['#0367A6', '#012840']} style={styles.container}>
-      <View style={styles.content}>
-        {events.length > 0 && swipedIndex < events.length ? (
-          <Animated.View
-            {...panResponder.panHandlers}
-            style={[styles.swipeable, { transform: drag.getTranslateTransform() }]}
-          >
-            <EventCard event={events[swipedIndex]} />
-          </Animated.View>
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No more events to show</Text>
-          </View>
-        )}
-      </View>
-      {renderOverlay()}
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[styles.card, { transform: position.getTranslateTransform() }]}
+      >
+        <EventCard event={events[index]} />
+      </Animated.View>
     </LinearGradient>
   );
 };
@@ -107,40 +78,21 @@ const EventSwipeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  content: {
-    flex: 1,
     justifyContent: 'center',
+    padding: 16,
   },
-  swipeable: {
+  card: {
     position: 'absolute',
     width: '100%',
-    height: '100%',
   },
-  emptyState: {
+  center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyText: {
-    fontSize: 18,
+  doneText: {
     color: 'white',
-  },
-  overlayBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1,
-  },
-  overlayText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    marginTop: 10,
+    fontSize: 20,
   },
 });
 

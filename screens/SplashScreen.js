@@ -39,7 +39,7 @@ const SplashScreen = () => {
         />
         <Animated.View style={[styles.imageWrapper, { opacity: textOpacity }]}>
           <Image
-            source={require('../assets/entry/welcomeImage.png')}
+            source={require('../assets/entry/RAUXA.png')}
             style={styles.image}
             resizeMode="contain"
           />
