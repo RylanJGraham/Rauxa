@@ -35,6 +35,8 @@ const EventCard = ({ event }) => {
 
   const currentImage = event.photos?.[currentIndex];
   const isFirstSlide = currentIndex === 0;
+  const attendeeImages = event.attendees?.map(att => att.profileImages?.[0]).filter(Boolean) || [];
+
 
   return (
     <TouchableWithoutFeedback onPress={handleTap}>
@@ -103,12 +105,12 @@ const EventCard = ({ event }) => {
         {currentIndex === 0 ? (
         <View style={styles.hostOverlay}>
           <Image
-            source={{ uri: 'https://randomuser.me/api/portraits/men/45.jpg' }}
+            source={{ uri: event.hostInfo?.profileImages?.[0] || 'https://via.placeholder.com/150' }}
             style={styles.hostCircle}
           />
           <View style={styles.hostInfo}>
             <Text style={styles.hostedBy}>Hosted by:</Text>
-            <Text style={styles.hostName}>Ratadelacasa</Text>
+            <Text style={styles.hostName}>{event.hostInfo?.name || 'Unknown'}</Text>
           </View>
         </View>
       ) : currentIndex === 2 ? (
@@ -125,15 +127,15 @@ const EventCard = ({ event }) => {
       ) : (
         <View style={styles.attendeesOverlay}>
           <View style={styles.attendeeCircles}>
-            {profilePics.map((uri, i) => (
+            {attendeeImages.map((uri, index) => (
               <Image
-                key={i}
+                key={index}
                 source={{ uri }}
                 style={[
                   styles.attendeeCircle,
                   {
-                    left: i * 23,
-                    zIndex: 6 - i,
+                    width: 46 + ((attendeeImages.length - 1) * 23),
+                    zIndex: 6 - index,
                     borderWidth: 2,
                     borderColor: '#0367A6',
                   },
@@ -143,7 +145,7 @@ const EventCard = ({ event }) => {
           </View>
           <View style={styles.hostInfo}>
             <Text style={styles.hostedBy}>Attended by:</Text>
-            <Text style={styles.hostName}>x6 People</Text>
+            <Text style={styles.hostName}>x{attendeeImages.length} People</Text>
           </View>
         </View>
       )}
@@ -355,9 +357,9 @@ attendeesOverlay: {
   backgroundColor: '#0367A6',
   paddingHorizontal: 12,
   paddingVertical: 8,
-  maxWidth: 260, // Add this to avoid off-screen overflow on small devices
   borderTopLeftRadius: 16,
   borderBottomLeftRadius: 16,
+  alignItems: 'center', // allows content-size shrinkage
 
   // (iOS)
   shadowColor: '#000',
@@ -374,10 +376,9 @@ attendeesOverlay: {
 
 attendeeCircles: {
   position: 'relative',
-  width: 46 + (5 * 23), // 6 circles, each offset by 23px
   height: 46,
   flexDirection: 'row',
-  marginRight: 8,
+  marginRight: 54,
 },
 
 attendeeCircle: {

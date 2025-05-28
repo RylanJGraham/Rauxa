@@ -11,13 +11,52 @@ const EventSwipeScreen = () => {
   const position = useRef(new Animated.ValueXY()).current;
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      const snapshot = await getDocs(collection(db, 'live'));
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setEvents(data);
-    };
-    fetchEvents();
-  }, []);
+  const fetchEvents = async () => {
+    const snapshot = await getDocs(collection(db, 'live'));
+    const data = await Promise.all(snapshot.docs.map(async doc => {
+      const eventData = { id: doc.id, ...doc.data() };
+
+      const attendeesSnapshot = await getDocs(collection(db, 'live', doc.id, 'attendees'));
+
+      const attendeeProfiles = await Promise.all(attendeesSnapshot.docs.map(async attendeeDoc => {
+        const userId = attendeeDoc.data().userId;
+        try {
+          const profileDoc = await getDocs(collection(db, 'users', userId, 'ProfileInfo'));
+          const userInfo = profileDoc.docs.find(d => d.id === 'userinfo')?.data();
+          const profileImages = (userInfo?.profileImages || []).filter(img => img); // Remove nulls
+          return { userId, profileImages };
+        } catch (err) {
+          console.error(`Failed to fetch profile for user ${userId}`, err);
+          return null;
+        }
+      }));
+
+      let hostInfo = null;
+      try {
+        const hostProfileSnap = await getDocs(collection(db, 'users', eventData.host, 'ProfileInfo'));
+        const userInfo = hostProfileSnap.docs.find(d => d.id === 'userinfo')?.data();
+        const profileImages = (userInfo?.profileImages || []).filter(Boolean);
+        hostInfo = {
+          userId: eventData.host,
+          profileImages,
+          name: `${userInfo?.displayFirstName || ''} ${userInfo?.displayLastName || ''}`.trim(),
+        };
+      } catch (err) {
+        console.error(`Failed to fetch host profile for user ${eventData.host}`, err);
+      }
+
+      return {
+        ...eventData,
+        attendees: attendeeProfiles.filter(Boolean),
+        hostInfo,
+      };
+    }));
+
+    setEvents(data);
+  };
+
+  fetchEvents();
+}, []);
 
   const panResponder = useRef(
     PanResponder.create({

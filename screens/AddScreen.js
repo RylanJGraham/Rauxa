@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import SearchBar from "../components/meetups/SearchBar";
 import FilterModal from "../components/meetups/FiltersModal";
 import EventCard from "../components/meetups/EventCard";
+import SponsoredEventCard from "../components/meetups/SponsoredEventCard";
 import { Ionicons } from '@expo/vector-icons';
 
 const tags = [
@@ -133,7 +134,7 @@ const MeetupScreen = () => {
         {sponsoredMeetups.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
             {sponsoredMeetups.map((item) => (
-              <EventCard
+              <SponsoredEventCard
                 key={item.id}
                 event={item}
                 onPress={() => navigation.navigate("EventDetails", { eventId: item.id })}
