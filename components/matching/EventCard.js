@@ -7,7 +7,7 @@ import { Linking } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-const EventCard = ({ event }) => {
+const EventCard = ({ event, isSwiping }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const dotCount = event.photos.length;
   const dotWidth = (width - dotCount * 8) / dotCount; // 8px total spacing per dot (4px margin each side)
@@ -23,14 +23,22 @@ const EventCard = ({ event }) => {
 
 
   const handleTap = (e) => {
+    if (isSwiping) return; // disable tap if swiping
+
     const tapX = e.nativeEvent.locationX;
-    if (tapX < width / 2) {
+    const leftBoundary = width * 0.2;
+    const rightBoundary = width * 0.8;
+
+    if (tapX <= leftBoundary) {
+      // Tap in left 20%
       setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
-    } else {
+    } else if (tapX >= rightBoundary) {
+      // Tap in right 20%
       setCurrentIndex((prev) =>
         prev < event.photos.length - 1 ? prev + 1 : prev
       );
     }
+    // Ignore taps in the middle 60%
   };
 
   const currentImage = event.photos?.[currentIndex];
@@ -39,13 +47,14 @@ const EventCard = ({ event }) => {
 
 
   return (
-    <TouchableWithoutFeedback onPress={handleTap}>
       <View style={styles.container}>
+        <TouchableWithoutFeedback onPress={isSwiping ? null : handleTap}>
         <Image
           source={{ uri: currentImage }}
           style={styles.image}
           resizeMode="cover"
         />
+        </TouchableWithoutFeedback>
         <LinearGradient
           colors={['#D9043D80', '#0367A680']}
           start={{ x: 0, y: 0 }}
@@ -171,7 +180,6 @@ const EventCard = ({ event }) => {
           </Text>
         </View>
       </View>
-    </TouchableWithoutFeedback>
   );
 };
 
@@ -301,7 +309,7 @@ locationContainer: {
 
 hostOverlay: {
   position: 'absolute',
-  bottom: 80,
+  top: 210,
   right: 0,
   flexDirection: 'row',
   alignItems: 'center',
@@ -350,7 +358,7 @@ hostName: {
 
 attendeesOverlay: {
   position: 'absolute',
-  bottom: 80,
+  top: 210,
   right: 0,
   flexDirection: 'row',
   alignItems: 'center',
@@ -418,7 +426,7 @@ inactiveDot: {
 
 tagsOverlay: {
   position: 'absolute',
-  bottom: 80,
+  top: 210,
   right: 0,
   padding: 12,
   backgroundColor: '#0367A6', // outer blue background

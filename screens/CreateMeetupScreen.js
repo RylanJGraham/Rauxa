@@ -1,476 +1,602 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Button, TouchableOpacity, StyleSheet, Image, ScrollView, FlatList, Dimensions, Modal } from 'react-native';
-import { db, storage } from '../firebase'; // Assuming you have your firebase setup
-import { collection, addDoc } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { Linking, Platform, Alert, View, ScrollView, TouchableOpacity, Text, StyleSheet, TextInput, Image, Dimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db } from '../firebase';
+import PixabayModal from '../components/create/PixabayModal';
 import * as ImagePicker from 'expo-image-picker';
-import { LinearGradient } from 'expo-linear-gradient'; // Import LinearGradient
-import { useNavigation } from '@react-navigation/native'; // Import useNavigation for navigation
-import { Ionicons } from '@expo/vector-icons'; // Import back button icon
-import EditableFieldEvent from '../components/particles/EditableFieldEvent'; // Adjust path as needed
-import EditableDateTimeRow from '../components/particles/EditableDateTimeRow';
-import axios from 'axios';
-import { useRoute } from "@react-navigation/native";
+import * as ImageManipulator from 'expo-image-manipulator';
 
-
-const { width } = Dimensions.get('window'); // Get screen width
+const { width } = Dimensions.get('window');
 
 const CreateMeetupScreen = () => {
+  const navigation = useNavigation();
   const route = useRoute();
   const { mode, eventData } = route.params || {};
+  const [isEditing, setIsEditing] = useState(mode === 'edit');
 
   const [title, setTitle] = useState(eventData?.title || '');
-  const [date, setDate] = useState(eventData?.date ? new Date(eventData.date) : new Date());
+  const [date, setDate] = useState(eventData?.date || '');
   const [time, setTime] = useState(eventData?.time || '');
   const [groupSize, setGroupSize] = useState(eventData?.groupSize?.toString() || '');
   const [location, setLocation] = useState(eventData?.location || '');
   const [tags, setTags] = useState(eventData?.tags || []);
-  const [photos, setPhotos] = useState(
-    eventData?.photos?.length ? eventData.photos : [require('../assets/default.jpg')]
-  );
+  const [photos, setPhotos] = useState(eventData?.photos || []);
+  const [description, setDescription] = useState(eventData?.description || '');
+
+  // User info states
+  const [hostFirstName, setHostFirstName] = useState('');
+  const [hostLastName, setHostLastName] = useState('');
+  const [hostProfileImage, setHostProfileImage] = useState(null);
+
+
   const [isPixabayModalVisible, setIsPixabayModalVisible] = useState(false);
-  const [pixabaySearch, setPixabaySearch] = useState('');
-  const [pixabayImages, setPixabayImages] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  const [activeIndex, setActiveIndex] = useState(0);
+  const auth = getAuth();
+  const storage = getStorage();
 
-  const fetchPixabayImages = async (query) => {
-    if (!query) return;
-    
-    try {
-      const response = await axios.get(`https://pixabay.com/api/`, {
-        params: {
-          key: '43686627-bea5035c6ed71178e9b835cb9',  // Replace with your actual API key
-          q: query,
-          image_type: 'photo',
-          per_page: 10,
-        },
-      });
-  
-      setPixabayImages(response.data.hits);
-    } catch (error) {
-      console.error("Error fetching Pixabay images:", error);
-      alert('Error fetching images. Please try again.');
-    }
-  };
+  const uploadImageToFirebase = async (uri, folder = 'liveEventPics') => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const extension = uri.split('.').pop();
+    const filename = `${folder}/${Date.now()}.${extension}`;
 
+    const photoRef = ref(storage, filename);
+    const metadata = {
+      contentType: blob.type || 'image/jpeg',
+    };
 
-  const navigation = useNavigation(); // Initialize the navigation hook
+    await uploadBytes(photoRef, blob, metadata);
+    const downloadURL = await getDownloadURL(photoRef);
+    return downloadURL;
+  } catch (error) {
+    console.error('Image upload failed:', error);
+    throw error;
+  }
+};
 
-  const [editModes, setEditModes] = useState({
-    title: false,
-    date: true, // Keep date always editable
-    time: true,  // Keep time always editable
-    groupSize: false,
-    location: false,
+  const handleOpenLocation = () => {
+  // Example: Open Google Maps or just alert for now
+  if (location) {
+    const url = Platform.select({
+      ios: `maps:0,0?q=${location}`,
+      android: `geo:0,0?q=${location}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Error', 'Could not open map app.');
+    });
+  } else {
+    Alert.alert('No location specified');
+  }
+};
+
+const handlePickImage = async () => {
+  if (photos.length >= 3) {
+    Alert.alert("Limit", "Max 3 photos allowed.");
+    return;
+  }
+
+  const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permissionResult.granted) {
+    Alert.alert("Permission Required", "Please allow access to your photos.");
+    return;
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    aspect: [4, 3],
+    quality: 0.75,
   });
 
-  const toggleEditMode = (field) => {
-    setEditModes((prev) => ({
-      ...prev,
-      [field]: !prev[field],
-    }));
-  };
+  if (!result.canceled && result.assets?.[0]) {
+    try {
+      // Resize and convert to WEBP
+      const manipulatedImage = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 800 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.WEBP }
+      );
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const newPhotoUri = result.assets[0].uri;
-      setPhotos([newPhotoUri]); // Update photos with selected image
+      const uploadedUrl = await uploadImageToFirebase(manipulatedImage.uri, 'liveEventPics');
+      setPhotos(prev => [...prev, uploadedUrl]);
+    } catch (error) {
+      console.error('Image upload error:', error);
+      Alert.alert("Upload Failed", "Could not upload image. Please try again.");
     }
-  };
+  }
+};
 
-  // Function to handle form submission
-  const handleSubmit = async () => {
-    if (!title || !date || !location) {
-      alert('Please fill in all required fields.');
-      return;
-    } else {
-      console.log("Submitting the meetup details:");
-      console.log("Title: ", title);
-      console.log("Date: ", date);
-      console.log("Time: ", time);
-      console.log("Group Size: ", groupSize);
-      console.log("Location: ", location);
-      console.log("Tags: ", tags);
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
 
       try {
-        // Upload photos to Firebase Storage (Optional)
-        const photoUrls = [];
-        for (let photo of photos) {
-          const response = await fetch(photo);
-          const blob = await response.blob();
-          const ref = storage.ref().child(`meetups/${Date.now()}.jpg`);
-          await ref.put(blob);
-          const photoUrl = await ref.getDownloadURL();
-          photoUrls.push(photoUrl);
+        // Assuming your user profile is stored in 'users/{uid}/ProfileInfo/userinfo'
+        const profileDoc = await getDoc(doc(db, 'users', user.uid, 'ProfileInfo', 'userinfo'));
+        if (profileDoc.exists()) {
+          const data = profileDoc.data();
+          setHostFirstName(data.displayFirstName || '');
+          setHostLastName(data.displayLastName || '');
+          // set profile pic from first element of profileImages array if exists
+          if (Array.isArray(data.profileImages) && data.profileImages.length > 0) {
+            setHostProfileImage(data.profileImages[0]);
+          }
         }
-
-        // Save meetup details to Firestore
-        await addDoc(collection(db, "meetups"), {
-          title,
-          date,
-          time,
-          groupSize: parseInt(groupSize),
-          location,
-          tags,
-          photos: photoUrls,
-        });
-
-        alert('Meetup created successfully!');
       } catch (error) {
-        console.error("Error creating meetup:", error);
-        alert('Error creating meetup. Please try again.');
+        console.error('Error fetching user profile info:', error);
       }
-    }
-  };
+    };
 
-  // Handle tag selection (Example: hardcoded tags)
-  const handleTagSelect = (tag) => {
-    setTags((prevTags) =>
-      prevTags.includes(tag) ? prevTags.filter((t) => t !== tag) : [...prevTags, tag]
-    );
-  };
+    fetchUserInfo();
+  }, []);
 
-   // Function to handle image delete
-   const handleImageDelete = (index) => {
-    // Prevent deletion if the image is the default image
-    if (photos[index] === require('../assets/default.jpg')) {
+  // ... rest of your existing functions (handlePickImage, handleOpenLocation)...
+
+  const handleSubmit = async () => {
+  if (!title.trim() || !date.trim() || !location.trim() || !groupSize.trim()) {
+    Alert.alert("Missing Fields", "Please fill in all required fields: Title, Date, Location, Group Size.");
+    return;
+  }
+
+  if (isNaN(parseInt(groupSize)) || parseInt(groupSize) <= 0) {
+    Alert.alert("Invalid Group Size", "Group Size must be a positive number.");
+    return;
+  }
+
+    try {
+    const user = auth.currentUser;
+    if (!user) {
+      Alert.alert("Authentication", "User not logged in.");
       return;
     }
-    
-    setPhotos((prevPhotos) => {
-      const newPhotos = [...prevPhotos];
-      newPhotos.splice(index, 1);
-      return newPhotos;
-    });
-  };
-  return (
-    <LinearGradient
-      colors={["#D9043D", "#730220"]} // Gradient colors
-      style={styles.container} // Apply gradient as background
-    >
-      
-      <ScrollView contentContainerStyle={styles.innerContainer}>
-        {/* Back Button */}
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()} // Go back to previous screen
-        >
-          <Ionicons name="arrow-back" size={30} color="white" />
-        </TouchableOpacity>
 
-        {/* Conditional Upload Button */}
-        {photos.length === 0 && (
-          <TouchableOpacity onPress={pickImage} style={styles.uploadButtonAbove}>
-            <Ionicons name="cloud-upload" size={24} color="white" />
+    const photoUrls = [];
+
+    for (let photo of photos) {
+  if (photo.startsWith('http')) {
+    photoUrls.push(photo); // Already uploaded
+  } else {
+    try {
+      const uploadedUrl = await uploadImageToFirebase(photo);
+      photoUrls.push(uploadedUrl);
+    } catch (uploadError) {
+      console.error('Error uploading image:', uploadError);
+      throw uploadError;
+    }
+  }
+}
+
+    const now = new Date();
+    const parsedDate = new Date(date); // Assumes `date` includes both date and time in string
+
+    const docRef = await addDoc(collection(db, "live"), {
+      Sponsor: "",
+      active: true,
+      attendeesCount: 1,
+      createdAt: now,
+      updatedAt: now,
+      date: parsedDate,
+      description: description.trim(),
+      full: false,
+      groupSize: parseInt(groupSize),
+      host: user.uid,
+      location: location.trim(),
+      photos: photoUrls,
+      sponsored: false,
+      tags,
+      title: title.trim()
+    });
+
+    // Optionally: show success and go back
+    Alert.alert("Success", "Event created successfully!");
+    navigation.goBack();
+
+  } catch (error) {
+  console.error("Full error:", error);
+  console.error("Error code:", error.code);
+  console.error("Error message:", error.message);
+  console.error("Server response:", error.customData?.serverResponse);
+  Alert.alert("Error", `Failed to create event: ${error.code}\n${error.message}`);
+}
+};
+
+
+  return (
+    <LinearGradient colors={["#D9043D", "#730220"]} style={styles.gradient}>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <Ionicons name="arrow-back" size={30} color="white" />
+      </TouchableOpacity>
+
+      {/* Image Gallery */}
+      <View style={styles.galleryContainer}>
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onScroll={(event) => {
+            const index = Math.floor(event.nativeEvent.contentOffset.x / width);
+            setCurrentImageIndex(index);
+          }}
+          scrollEventThrottle={16}
+        >
+          {photos.map((uri, index) => (
+            <View key={index} style={styles.imageWrapper}>
+              <Image source={{ uri }} style={styles.image} />
+              {/* X delete button */}
+              {currentImageIndex === index && (
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => {
+                    const newPhotos = [...photos];
+                    newPhotos.splice(index, 1);
+                    setPhotos(newPhotos);
+                    if (currentImageIndex >= newPhotos.length) {
+                      setCurrentImageIndex(newPhotos.length - 1);
+                    }
+                  }}
+                >
+                  <Ionicons name="close-circle" size={28} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+
+        {/* Pagination dots */}
+        <View style={styles.paginationDotsContainer}>
+          {photos.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.indicator, currentImageIndex === i && styles.activeIndicator]}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* Thumbnails + Upload + Pixabay row with dark red background */}
+      <View style={styles.thumbnailAndButtonsRow}>
+  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailsScroll}>
+    {photos.map((uri, index) => (
+      <View key={index} style={styles.thumbnailWrapper}>
+        <Image source={{ uri }} style={styles.thumbnail} />
+        
+        {/* Move Left */}
+        {index > 0 && (
+          <TouchableOpacity
+            style={[styles.arrowButton, styles.leftArrow]}
+            onPress={() => {
+              const newPhotos = [...photos];
+              [newPhotos[index - 1], newPhotos[index]] = [newPhotos[index], newPhotos[index - 1]];
+              setPhotos(newPhotos);
+              setCurrentImageIndex(index - 1);
+            }}
+          >
+            <Ionicons name="arrow-back-circle" size={18} color="#fff" />
           </TouchableOpacity>
         )}
 
-        {/* Image Gallery */}
-        <View style={styles.galleryContainer}>
-          <FlatList
-            data={photos} // Use the photos array for the image gallery
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(event) => {
-              const index = Math.round(event.nativeEvent.contentOffset.x / (width * 0.8));
-              setActiveIndex(index); // Update active image index
-            }}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item, index }) => (
-              <View style={styles.imageContainer}>
-                <Image
-                  source={typeof item === 'string' ? { uri: item } : item} // Check if it's URI or local image
-                  style={styles.profileImage}
-                  onError={() => console.error('Error loading image:', item)}
-                />
-
-                {/* X Delete Button */}
-                {item !== require('../assets/default.jpg') && (  // Only show delete button if it's not the default image
-                  <View style={styles.deleteIconWrapper}>
-                    <LinearGradient colors={["#F2BB47", "#D9043D"]} style={styles.addIconButton}>
-                      <TouchableOpacity onPress={() => handleImageDelete(index)}>
-                        <Ionicons name="close" size={20} color="#fff" />
-                      </TouchableOpacity>
-                    </LinearGradient>
-                  </View>
-                )}
-              </View>
-            )}
-          />
-          {/* Image Indicators */}
-          <View style={styles.indicatorContainer}>
-            {photos.map((_, index) => (
-              <View
-                key={index}
-                style={{
-                  ...styles.indicator,
-                  width: `${60 / photos.length}%`,
-                  backgroundColor: index === activeIndex ? '#D9043D' : '#730220',
-                }}
-              />
-            ))}
-          </View>
-
-          {/* Upload Button Positioned Inside Gallery when Photos Exist */}
-          {photos.length > 0 && (
-            <TouchableOpacity onPress={pickImage} style={styles.uploadButton}>
-              <Ionicons name="cloud-upload" size={24} color="white" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Title */}
-        <EditableFieldEvent
-          title="Title"
-          value={title}
-          isEditing={editModes.title}
-          onEdit={() => toggleEditMode('title')}
-          onChangeText={setTitle}
-        />
-
-        {/* Editable DateTime Row */}
-        <EditableDateTimeRow
-          date={date} 
-          setDate={setDate} 
-          time={time}  // Pass the time prop
-          setTime={setTime}  // Add the setTime function to handle time updates
-          isEditing={true}  // Always in editing mode
-        />
-
-        <EditableFieldEvent
-          title="Group Size"
-          value={groupSize}
-          isEditing={editModes.groupSize}
-          onEdit={() => toggleEditMode('groupSize')}
-          onChangeText={setGroupSize}
-          keyboardType="numeric"
-        />
-
-        <EditableFieldEvent
-          title="Location"
-          value={location}
-          isEditing={editModes.location}
-          onEdit={() => toggleEditMode('location')}
-          onChangeText={setLocation}
-        />
-
-        {/* Tags */}
-        <View style={styles.tagsContainer}>
-          {['Music', 'Sports', 'Karaoke', 'Clubs', 'Beach', 'Dating'].map((tag) => (
-            <TouchableOpacity
-              key={tag}
-              style={[styles.tagButton, tags.includes(tag) && styles.selectedTag]}
-              onPress={() => handleTagSelect(tag)}
-            >
-              <Text style={styles.tagText}>{tag}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TouchableOpacity onPress={() => setIsPixabayModalVisible(true)} style={styles.pixabayButton}>
-        <Ionicons name="image" size={24} color="white" />
-      </TouchableOpacity>
-
-      {isPixabayModalVisible && (
-  <Modal
-    animationType="slide"
-    transparent={true}
-    visible={isPixabayModalVisible}
-    onRequestClose={() => setIsPixabayModalVisible(false)}
-  >
-    <View style={styles.modalContainer}>
-      {/* Close Button */}
-      <TouchableOpacity
-        onPress={() => setIsPixabayModalVisible(false)}
-        style={styles.closeButton}
-      >
-        <Ionicons name="close" size={30} color="white" />
-      </TouchableOpacity>
-
-      {/* Search Input */}
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search for images..."
-        value={pixabaySearch}
-        onChangeText={setPixabaySearch}
-        onSubmitEditing={() => fetchPixabayImages(pixabaySearch)}
-      />
-
-      {/* Image Results */}
-      <ScrollView>
-        {pixabayImages.map((image, index) => (
+        {/* Move Right */}
+        {index < photos.length - 1 && (
           <TouchableOpacity
-            key={index}
+            style={[styles.arrowButton, styles.rightArrow]}
             onPress={() => {
-              setPhotos([...photos, image.largeImageURL]);
-              setIsPixabayModalVisible(false);  // Close modal after selecting image
+              const newPhotos = [...photos];
+              [newPhotos[index], newPhotos[index + 1]] = [newPhotos[index + 1], newPhotos[index]];
+              setPhotos(newPhotos);
+              setCurrentImageIndex(index + 1);
             }}
           >
-            <Image source={{ uri: image.previewURL }} style={styles.pixabayImage} />
+            <Ionicons name="arrow-forward-circle" size={18} color="#fff" />
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  </Modal>
-)}
+        )}
 
-      <FlatList
-        data={photos}
-        horizontal
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item }) => <Image source={{ uri: item }} style={styles.profileImage} />}
+        {/* Select Thumbnail */}
+        <TouchableOpacity
+          onPress={() => setCurrentImageIndex(index)}
+          style={[
+            styles.thumbnailTouchable,
+            currentImageIndex === index && styles.activeThumbnailBorder,
+            { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+          ]}
+        />
+      </View>
+    ))}
+  </ScrollView>
+
+  {/* Upload + Pixabay Buttons */}
+  <View style={styles.iconButtonsRow}>
+    <TouchableOpacity style={styles.iconButton} onPress={handlePickImage}>
+      <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
+      <Text style={styles.iconButtonText}>Upload</Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => {
+        if (photos.length >= 3) return Alert.alert("Limit", "Max 3 photos allowed.");
+        setIsPixabayModalVisible(true);
+      }}
+    >
+      <Ionicons name="images-outline" size={28} color="#fff" />
+      <Text style={styles.iconButtonText}>Pixabay</Text>
+    </TouchableOpacity>
+  </View>
+</View>
+
+      {/* Fields */}
+      {renderField("Title", title, setTitle, isEditing)}
+      {renderField("Date", date, setDate, isEditing)}
+      {renderField("Time", time, setTime, isEditing)}
+      {renderField("Group Size", groupSize, setGroupSize, isEditing, "numeric")}
+      {renderField("Location", location, setLocation, isEditing, "default", true, handleOpenLocation)}
+      {renderField("Description", description, setDescription, isEditing, "default")}
+
+      {/* Host info row */}
+      <View style={styles.hostRow}>
+        {hostProfileImage ? (
+          <Image source={{ uri: hostProfileImage }} style={styles.hostImage} />
+        ) : (
+          <View style={[styles.hostImage, styles.hostImagePlaceholder]} />
+        )}
+        <View style={styles.hostInfo}>
+          <Text style={styles.hostLabel}>Host</Text>
+          <Text style={styles.hostName}>{hostFirstName} {hostLastName}</Text>
+        </View>
+      </View>
+
+      {/* Buttons */}
+      <View style={styles.buttonRow}>
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: isEditing ? "#5B0A1F" : "#F2BB47" }]}
+          onPress={() => setIsEditing(prev => !prev)}
+        >
+          <Text style={styles.buttonText}>{isEditing ? "Done Editing" : "Edit Meetup"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: "#0367A6" }]}
+          onPress={handleSubmit}
+        >
+          <Text style={styles.buttonText}>Create</Text>
+        </TouchableOpacity>
+      </View>
+
+      <PixabayModal
+        visible={isPixabayModalVisible}
+        onClose={() => setIsPixabayModalVisible(false)}
+        onSelect={(url) => {
+          setPhotos(prev => [...prev, url]);
+          setIsPixabayModalVisible(false);
+        }}
       />
-
-        {/* Submit Button */}
-        <Button title="Create Meetup" onPress={handleSubmit} />
-      </ScrollView>
-
     </LinearGradient>
   );
 };
 
+const renderField = (
+  label,
+  value,
+  setter,
+  editable,
+  keyboardType = 'default',
+  isLocation = false,
+  onPressLocation
+) => (
+  <View style={styles.infoRow}>
+    <Ionicons
+      name={
+        label === "Title" ? "chatbubble-ellipses-outline" :
+        label === "Date" ? "calendar-outline" :
+        label === "Time" ? "time-outline" :
+        label === "Group Size" ? "people-outline" :
+        label === "Location" ? "location-outline" : "information-circle-outline"
+      }
+      size={20}
+      color="#fff"
+      style={styles.icon}
+    />
+    <Text style={styles.label}>{label}:</Text>
+    {editable ? (
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+        <TextInput
+          value={value}
+          onChangeText={setter}
+          keyboardType={keyboardType}
+          style={[styles.input, { flex: 1, color: '#fff' }]}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          placeholderTextColor="#aaa"
+        />
+        {isLocation && (
+          <TouchableOpacity onPress={onPressLocation} style={{ marginLeft: 10 }}>
+            <Ionicons name="map-outline" size={20} color="#F2BB47" />
+          </TouchableOpacity>
+        )}
+      </View>
+    ) : (
+      <Text style={styles.value}>{value || "N/A"}</Text>
+    )}
+  </View>
+);
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 0,
-  },
-  innerContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingBottom: 40, // Add space for the bottom content
-  },
+  gradient: { flex: 1 },
   backButton: {
     position: 'absolute',
-    top: 20,
+    top: 40,
     left: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)', // White with opacity
-    padding: 10,
-    borderRadius: 30, // Circle shape
-    zIndex: 1, // Make sure it's above other content
+    zIndex: 10,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    marginRight: 15,
+  },
+  icon: { marginRight: 8 },
+  label: { color: '#fff', fontWeight: 'bold', width: 100 },
+  value: { color: '#fff', flex: 1 },
+  input: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#fff',
+    paddingVertical: 2,
+    fontSize: 16,
+    color: '#fff',
+  },
+  hostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 30,
+  },
+  hostImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#ccc',
+  },
+  hostImagePlaceholder: {
+    backgroundColor: '#555',
+  },
+  hostInfo: {
+    marginLeft: 12,
+  },
+  hostLabel: {
+    color: '#F2BB47',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  hostName: {
+    color: '#fff',
+    fontSize: 16,
   },
   galleryContainer: {
-    width: '100%',
-    alignSelf: 'center',
-    overflow: 'hidden',
-    marginBottom: 20, // Spacing between the gallery and the rest of the form
-    position: 'relative', // Set the parent container's position relative for absolute positioning of the button
-  },
-  profileImage: {
-    width: width, // Image width is 80% of screen width
-    height: width, // Image height is 1.2x the width for a wide view
-    resizeMode: 'cover',
-  },
-  indicatorContainer: {
-    flexDirection: 'row',
-    position: 'absolute',
-    bottom: 2,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  indicator: {
-    height: 4,
-    margin: 6,
-    borderRadius: 3,
-  },
-  imageContainer: {
+    width,
+    height: 300,
     position: 'relative',
   },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginVertical: 10,
+  imageWrapper: {
+    width,
+    height: 300,
+    position: 'relative',
   },
-  tagButton: {
-    backgroundColor: '#ccc',
-    padding: 8,
-    margin: 5,
-    borderRadius: 5,
+  image: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+    borderRadius: 10,
   },
-  selectedTag: {
-    backgroundColor: '#D9043D',
-  },
-  tagText: {
-    color: 'white',
-  },
-  uploadButton: {
-    position: 'absolute',
-    bottom: 10, // Positioned just above the images
-    left: 10, // Left corner of the gallery
-    backgroundColor: '#0367A6', // Blue color
-    padding: 15,
-    borderRadius: 50, // Circle shape
-    zIndex: 2, // Ensure it's on top of the gallery
-  },
-  uploadButtonAbove: {
-    alignSelf: 'center',
-    backgroundColor: '#0367A6', // Blue color
-    padding: 15,
-    borderRadius: 50, // Circle shapepixabaybutton: {    position: 'absolute',    top: 10,    right: 10,    backgroundColor: '#0367A6',%20%20%20%20padding:%2015,%20%20%20%20borderRadius:%2050,%20%20%20%20zIndex:%202,%20%20},%20%20modalContainer:%20{%20%20%20%20flex:%201,%20%20%20%20justifyContent:%20'center',%20%20%20%20alignItems:%20'center',%20%20%20%20backgroundColor:%20'rgba(0,%200,%200,%200.5)',%20%20},%20%20searchInput:%20{%20%20%20%20width:%20'80%',%20%20%20%20padding:%2010,%20%20%20%20marginBottom:%2020,%20%20%20%20backgroundColor:%20'white',%20%20%20%20borderRadius:%205,%20%20%20%20textAlign:%20'center',%20%20},%20%20pixabayImage:%20{%20%20%20%20width:%20100,%20%20%20%20height:%20100,%20%20%20%20margin:%205,%20%20%20%20borderRadius:%205,%20%20},
-    zIndex: 2, // Ensure it's above the form
-    marginBottom: 20, // Space above the title
-  },
-  deleteIconWrapper: {
+  removeButton: {
     position: 'absolute',
     bottom: 10,
     right: 10,
-    zIndex: 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 20,
-    overflow: 'hidden',
+    padding: 2,
+    zIndex: 10,
   },
-  addIconButton: {
-    padding: 6,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pixabayButton: {
+  paginationDotsContainer: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#0367A6',
-    padding: 15,
-    borderRadius: 50,
-    zIndex: 2,
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    zIndex: 10,
   },
-  modalContainer: {
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
+    backgroundColor: '#666',
+  },
+  activeIndicator: {
+    backgroundColor: '#F2BB47',
+  },
+  bottomRow: {
+    flexDirection: 'column',
+  },
+ thumbnailAndButtonsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#730220', // dark red background
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  thumbnailsScroll: {
+    flexGrow: 0,
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
-  searchInput: {
-    width: '80%',
-    marginTop: 60,
-    padding: 10,
-    marginBottom: 20,
-    backgroundColor: 'white',
-    borderRadius: 5,
-    textAlign: 'center',
+  thumbnailTouchable: {
+    marginHorizontal: 4,
+    borderRadius: 8,
   },
-  pixabayImage: {
-    width: 100,
-    height: 100,
-    margin: 5,
-    borderRadius: 5,
+  activeThumbnailBorder: {
+    borderWidth: 2,
+    borderColor: '#F2BB47',
   },
-  closeButton: {
+  thumbnailWrapper: {
+  position: 'relative',
+  marginHorizontal: 4,
+},
+  thumbnail: {
+  width: 50,
+  height: 50,
+  borderRadius: 8,
+  resizeMode: 'cover',
+  backgroundColor: '#000', // optional fallback
+},
+  arrowButton: {
     position: 'absolute',
-    top: 20,
-    right: 20,
-    zIndex: 2,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Optional: to make the close button background semi-transparent
-    borderRadius: 20,
-    padding: 10,
+    top: '50%',
+    marginTop: -10,
+    backgroundColor: '#0006',
+    borderRadius: 12,
+    padding: 2,
+  },
+  leftArrow: {
+    left: 2,
+  },
+  rightArrow: {
+    right: 2,
+  },
+   iconButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  iconButton: {
+    alignItems: 'center',
+    marginHorizontal: 8,
+  },
+  iconButtonText: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginHorizontal: 20,
+    marginBottom: 30,
+  },
+  button: {
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+  },
+  buttonText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#fff',
   },
 });
 

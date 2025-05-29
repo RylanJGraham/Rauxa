@@ -12,6 +12,7 @@ import AddScreen from '../screens/AddScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import CreateMeetupScreen from '../screens/CreateMeetupScreen'; // Create Meetup Screen
 import EventDetailsScreen from '../screens/EventDetailsScreen';
+import HubScreen from '../screens/HubScreen';
 
 // Import icons
 import ChatActiveIcon from '../assets/tabs/Message-Active.png';
@@ -22,6 +23,9 @@ import ProfileActiveIcon from '../assets/tabs/Profile-Active.png';
 import ProfileInactiveIcon from '../assets/tabs/Profile.png';
 import MainActiveIcon from '../assets/tabs/Home-Active.png';
 import MainInactiveIcon from '../assets/tabs/Home.png';
+import HubActiveIcon from '../assets/tabs/Hub-Active.png';
+import HubInactiveIcon from '../assets/tabs/Hub.png';
+
 
 const Tab = createBottomTabNavigator();
 const AddStack = createNativeStackNavigator(); // Stack Navigator for Add Tab
@@ -87,6 +91,20 @@ const TabNavigator = () => (
             inactiveIcon={AddInactiveIcon}
           />
         )
+      }}
+    />
+    <Tab.Screen
+      name="Hub"
+      component={HubScreen}
+      options={{
+        tabBarLabel: 'Hub',
+        tabBarIcon: ({ focused }) => (
+          <TabBarIcon
+            focused={focused}
+            activeIcon={HubActiveIcon}
+            inactiveIcon={HubInactiveIcon}
+          />
+        ),
       }}
     />
     <Tab.Screen 
