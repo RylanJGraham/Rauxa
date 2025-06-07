@@ -19,10 +19,11 @@ import * as ImagePicker from "expo-image-picker";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { AntDesign } from "@expo/vector-icons";
-import * as ImageManipulator from "expo-image-manipulator";
+import * as ImageManipulator from 'expo-image-manipulator';
 import NextButton from "../components/onboarding-components/NextButton";
 import InterestsSelection from "../components/profile-setup/InterestsSelection";
 import GenderOptions from "../components/profile-setup/GenderOptions";
+import * as FileSystem from 'expo-file-system';
 
 const { width, height } = Dimensions.get("window");
 
@@ -30,7 +31,6 @@ const ProfileSetupScreen = () => {
     const navigation = useNavigation();
     const [currentIndex, setCurrentIndex] = useState(0);
     const flatListRef = useRef(null);
-    const rotateAnim = useRef(new Animated.Value(0)).current;
     const [isUploading, setIsUploading] = useState(false);
 
     const [profileData, setProfileData] = useState({
@@ -43,47 +43,57 @@ const ProfileSetupScreen = () => {
         profileImages: Array(9).fill(null),
     });
 
-    // Clean up animation on unmount
+    const [localImageUris, setLocalImageUris] = useState(Array(9).fill(null));
+
+    const rotateAnimRefs = useRef(
+        Array(9).fill(null).map(() => new Animated.Value(0))
+    ).current;
+
     useEffect(() => {
-        return () => {
-            rotateAnim.stopAnimation();
-        };
-    }, []);
+        console.log("Current profileData.profileImages:", profileData.profileImages);
+        console.log("Is profileData.profileImages an array?", Array.isArray(profileData.profileImages));
+        console.log("Length of profileData.profileImages:", profileData.profileImages?.length);
+        console.log("Type of first element:", typeof profileData.profileImages?.[0]);
+
+        console.log("Current profileData.interests:", profileData.interests);
+        console.log("Is profileData.interests an array?", Array.isArray(profileData.interests));
+        console.log("Length of profileData.interests:", profileData.interests?.length);
+    }, [profileData.profileImages, profileData.interests]);
 
     const validateCurrentStep = useCallback(() => {
         switch (currentIndex) {
-            case 1: // First name
+            case 1:
                 if (!profileData.displayFirstName.trim()) {
                     Alert.alert("Required", "Please enter your first name");
                     return false;
                 }
                 break;
-            case 2: // Last name
+            case 2:
                 if (!profileData.displayLastName.trim()) {
                     Alert.alert("Required", "Please enter your last name");
                     return false;
                 }
                 break;
-            case 3: // Age
+            case 3:
                 if (!profileData.age || isNaN(profileData.age) || parseInt(profileData.age) < 18) {
                     Alert.alert("Invalid Age", "Please enter a valid age (18+)");
                     return false;
                 }
                 break;
-            case 4: // Gender
+            case 4:
                 if (!profileData.gender) {
                     Alert.alert("Required", "Please select your gender");
                     return false;
                 }
                 break;
-            case 5: // Interests
-                if (profileData.interests.length < 3) {
+            case 5:
+                if (!Array.isArray(profileData.interests) || profileData.interests.length < 3) {
                     Alert.alert("Required", "Please select at least 3 interests");
                     return false;
                 }
                 break;
-            case 6: // Profile images
-                if (profileData.profileImages.filter(Boolean).length < 1) {
+            case 6:
+                if (!Array.isArray(profileData.profileImages) || profileData.profileImages.filter(Boolean).length < 1) {
                     Alert.alert("Required", "Please upload at least 1 profile picture");
                     return false;
                 }
@@ -92,14 +102,16 @@ const ProfileSetupScreen = () => {
         return true;
     }, [currentIndex, profileData]);
 
+
     const handleNext = useCallback(() => {
         if (!validateCurrentStep()) return;
-        
-        if (currentIndex < slides.length - 1) {
+
+        // Ensure slides is available before accessing its length
+        if (Array.isArray(slides) && currentIndex < slides.length - 1) {
             flatListRef.current.scrollToIndex({ index: currentIndex + 1, animated: true });
             setCurrentIndex(currentIndex + 1);
         }
-    }, [currentIndex, validateCurrentStep]);
+    }, [currentIndex, validateCurrentStep]); // slides is now a stable dependency due to its placement
 
     const handleBack = useCallback(() => {
         if (currentIndex > 0) {
@@ -108,81 +120,88 @@ const ProfileSetupScreen = () => {
         }
     }, [currentIndex]);
 
-    const startRotation = useCallback(() => {
-        Animated.timing(rotateAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-        }).start(() => rotateAnim.setValue(0));
-    }, [rotateAnim]);
+    const startRotation = useCallback((index) => {
+        if (rotateAnimRefs[index]) {
+            Animated.timing(rotateAnimRefs[index], {
+                toValue: 1,
+                duration: 500,
+                useNativeDriver: true,
+            }).start(() => rotateAnimRefs[index].setValue(0));
+        }
+    }, [rotateAnimRefs]);
 
     const handleSelectInterest = useCallback((interest) => {
-        setProfileData((prevData) => ({
-            ...prevData,
-            interests: prevData.interests.includes(interest)
-                ? prevData.interests.filter((i) => i !== interest)
-                : [...prevData.interests, interest],
-        }));
+        setProfileData((prevData) => {
+            const currentInterests = Array.isArray(prevData.interests) ? prevData.interests : [];
+            return {
+                ...prevData,
+                interests: currentInterests.includes(interest)
+                    ? currentInterests.filter((i) => i !== interest)
+                    : [...currentInterests, interest],
+            };
+        });
     }, []);
 
     const pickImage = useCallback(async (index) => {
         try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission required', 'Need camera roll permissions to upload images');
+                return;
+            }
+
+            setIsUploading(true);
+
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [4, 3],
-                quality: 0.75,
+                quality: 0.7,
             });
 
             if (!result.canceled && result.assets?.[0]) {
                 const manipulatedImage = await ImageManipulator.manipulateAsync(
                     result.assets[0].uri,
                     [{ resize: { width: 800 } }],
-                    { compress: 0.6, format: ImageManipulator.SaveFormat.WEBP }
+                    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
                 );
-                
-                setProfileData((prevData) => {
-                    const newProfileImages = [...prevData.profileImages];
-                    newProfileImages[index] = manipulatedImage.uri;
-                    return { ...prevData, profileImages: newProfileImages };
+
+                setLocalImageUris(prev => {
+                    const newUris = [...prev];
+                    newUris[index] = manipulatedImage.uri;
+                    return newUris;
                 });
-                
-                await uploadImageToFirebase(manipulatedImage.uri, index);
-                startRotation();
+                setProfileData(prev => {
+                    const newImages = [...prev.profileImages];
+                    newImages[index] = manipulatedImage.uri;
+                    return { ...prev, profileImages: newImages };
+                });
+                startRotation(index);
             }
         } catch (error) {
-            console.error("Image picker error:", error);
-            Alert.alert("Error", "Failed to select image");
+            console.error("Image picking error:", error);
+            Alert.alert("Error", "Failed to pick image");
+        } finally {
+            setIsUploading(false);
         }
     }, [startRotation]);
 
-    const uploadImageToFirebase = useCallback(async (imageUri, index) => {
-        if (!auth.currentUser?.uid) {
-            Alert.alert("Error", "User not authenticated");
-            return;
+    const uploadSingleImageToFirebase = useCallback(async (uri, index) => {
+        if (!auth.currentUser) {
+            throw new Error('User not authenticated');
         }
 
-        setIsUploading(true);
-        const imageName = `${auth.currentUser.uid}_${index}.webp`;
-        const userFolderPath = `profilePics/${auth.currentUser.uid}`;
-        const imageRef = ref(storage, `${userFolderPath}/${imageName}`);
+        const filename = `profile_${auth.currentUser.uid}_${index}.jpg`;
+        const storageRef = ref(storage, `profilePics/${auth.currentUser.uid}/${filename}`);
 
         try {
-            const response = await fetch(imageUri);
+            const response = await fetch(uri);
             const blob = await response.blob();
-            await uploadBytes(imageRef, blob);
-            const imageUrl = await getDownloadURL(imageRef);
-
-            setProfileData((prevData) => {
-                const newProfileImages = [...prevData.profileImages];
-                newProfileImages[index] = imageUrl;
-                return { ...prevData, profileImages: newProfileImages };
-            });
+            await uploadBytes(storageRef, blob);
+            return await getDownloadURL(storageRef);
         } catch (error) {
-            console.error("Upload error:", error);
-            Alert.alert("Error", "Failed to upload image");
-        } finally {
-            setIsUploading(false);
+            console.error(`Error uploading image ${index}:`, error);
+            throw error;
         }
     }, []);
 
@@ -190,21 +209,44 @@ const ProfileSetupScreen = () => {
         const imageUrl = profileData.profileImages[index];
         if (!imageUrl) return;
 
-        try {
-            const imageName = `${auth.currentUser?.uid}_${index}.webp`;
-            const userFolderPath = `profilePics/${auth.currentUser?.uid}`;
-            const imageRef = ref(storage, `${userFolderPath}/${imageName}`);
-            
-            await deleteObject(imageRef);
-            
+        if (!imageUrl.startsWith('http')) {
             setProfileData((prevData) => {
                 const newProfileImages = [...prevData.profileImages];
                 newProfileImages[index] = null;
                 return { ...prevData, profileImages: newProfileImages };
             });
+            setLocalImageUris((prevUris) => {
+                const newUris = [...prevUris];
+                newUris[index] = null;
+                return newUris;
+            });
+            return;
+        }
+
+        try {
+            if (!auth.currentUser?.uid) {
+                Alert.alert("Error", "User not logged in or UID missing.");
+                return;
+            }
+            const filename = `profile_${auth.currentUser.uid}_${index}.jpg`;
+            const imageRef = ref(storage, `profilePics/${auth.currentUser.uid}/${filename}`);
+
+            await deleteObject(imageRef);
+
+            setProfileData((prevData) => {
+                const newProfileImages = [...prevData.profileImages];
+                newProfileImages[index] = null;
+                return { ...prevData, profileImages: newProfileImages };
+            });
+            setLocalImageUris((prevUris) => {
+                const newUris = [...prevUris];
+                newUris[index] = null;
+                return newUris;
+            });
+            Alert.alert("Success", "Image deleted successfully!");
         } catch (error) {
             console.error("Delete error:", error);
-            Alert.alert("Error", "Failed to delete image");
+            Alert.alert("Error", `Failed to delete image: ${error.message}`);
         }
     }, [profileData.profileImages]);
 
@@ -218,13 +260,42 @@ const ProfileSetupScreen = () => {
         setProfileData(prev => ({ ...prev, gender }));
     }, []);
 
-    const completeProfileSetup = useCallback(async () => {
-        if (!auth.currentUser) {
-            Alert.alert("Error", "No user logged in");
-            return;
-        }
+const completeProfileSetup = useCallback(async () => {
+    if (!auth.currentUser) {
+        Alert.alert("Error", "No user logged in");
+        console.error("completeProfileSetup: No user logged in.");
+        return;
+    }
+    // Add these logs
+    console.log("Current User UID:", auth.currentUser.uid);
+    console.log("Is user authenticated:", auth.currentUser !== null);
 
-        try {
+
+    setIsUploading(true);
+
+    try {
+        const uploadedImageUrls = [];
+        const imagesToProcess = Array.isArray(profileData.profileImages) ? profileData.profileImages : [];
+
+        const processImagesPromises = imagesToProcess.map(async (imageUri, index) => {
+            if (imageUri) {
+                if (imageUri.startsWith('file://') || imageUri.startsWith('assets-library://') || imageUri.startsWith('blob:')) {
+                    console.log(`Attempting to upload new image at index ${index}: ${imageUri}`);
+                    const downloadUrl = await uploadSingleImageToFirebase(imageUri, index);
+                    uploadedImageUrls[index] = downloadUrl;
+                    return downloadUrl;
+                } else if (imageUri.startsWith('http')) {
+                    console.log(`Keeping existing Firebase URL at index ${index}: ${imageUri}`);
+                    uploadedImageUrls[index] = imageUri;
+                    return imageUri;
+                }
+            }
+            uploadedImageUrls[index] = null;
+            return null;
+        });
+
+        await Promise.all(processImagesPromises);
+
             const userRef = doc(db, "users", auth.currentUser.uid);
             const profileRef = doc(collection(userRef, "ProfileInfo"), "userinfo");
 
@@ -234,36 +305,51 @@ const ProfileSetupScreen = () => {
                     displayLastName: profileData.displayLastName,
                     age: profileData.age,
                     gender: profileData.gender,
-                    interests: profileData.interests,
+                    interests: Array.isArray(profileData.interests) ? profileData.interests : [],
                     bio: profileData.bio,
-                    profileImages: profileData.profileImages,
+                    profileImages: uploadedImageUrls.filter(Boolean),
                     createdAt: new Date(),
-                }),
-                setDoc(userRef, { onboarded: true }, { merge: true })
+                }, { merge: true }),
+                setDoc(userRef, { onboarded: true }, { merge: true }),
             ]);
 
+            Alert.alert("Success", "Profile setup complete!");
             navigation.replace("App");
         } catch (error) {
             console.error("Profile setup error:", error);
             Alert.alert("Error", "Failed to complete profile setup");
+        } finally {
+            setIsUploading(false);
         }
-    }, [profileData, navigation]);
+    }, [profileData, navigation, uploadSingleImageToFirebase]);
 
-    const renderImageItem = useCallback(({ item: image, index }) => {
-        const rotationInterpolate = rotateAnim.interpolate({
+
+    // --- DEFINE renderImageItem HERE, BEFORE slides ---
+    const renderImageItem = useCallback(({ item: imageFirebaseUrl, index }) => {
+        console.log(`renderImageItem called for index ${index}`);
+        console.log(`  item (imageFirebaseUrl): ${imageFirebaseUrl} (type: ${typeof imageFirebaseUrl})`);
+        console.log(`  localImageUris[${index}]: ${localImageUris[index]} (type: ${typeof localImageUris[index]})`);
+
+        if (imageFirebaseUrl === undefined) {
+             console.warn(`renderImageItem received undefined item at index ${index}. Skipping render.`);
+             return null;
+        }
+
+        const displayImageUri = localImageUris[index] || imageFirebaseUrl;
+        const rotationInterpolate = rotateAnimRefs[index]?.interpolate({
             inputRange: [0, 1],
             outputRange: ["0deg", "360deg"],
         });
 
         return (
             <View key={index} style={styles.uploadContainer}>
-                <TouchableOpacity 
-                    style={styles.rectangle} 
-                    onPress={() => image ? null : pickImage(index)}
+                <TouchableOpacity
+                    style={styles.rectangle}
+                    onPress={() => displayImageUri ? null : pickImage(index)}
                     disabled={isUploading}
                 >
-                    {image ? (
-                        <Image source={{ uri: image }} style={styles.profileImage} />
+                    {displayImageUri ? (
+                        <Image source={{ uri: displayImageUri }} style={styles.profileImage} />
                     ) : (
                         <View style={styles.placeholder} />
                     )}
@@ -274,21 +360,25 @@ const ProfileSetupScreen = () => {
                     )}
                 </TouchableOpacity>
 
-                <Animated.View style={[styles.addIconContainer, { transform: [{ rotate: rotationInterpolate }] }]}>
+                <Animated.View style={[
+                    styles.addIconContainer,
+                    displayImageUri && rotationInterpolate ? { transform: [{ rotate: rotationInterpolate }] } : {},
+                ]}>
                     <LinearGradient colors={["#F2BB47", "#D9043D"]} style={styles.addIconButton}>
-                        <TouchableOpacity 
-                            onPress={() => image ? handleDeletePress(index) : pickImage(index)}
+                        <TouchableOpacity
+                            onPress={() => displayImageUri ? handleDeletePress(index) : pickImage(index)}
                             disabled={isUploading}
-                            accessibilityLabel={image ? "Delete image" : "Add image"}
                         >
-                            <AntDesign name={image ? "close" : "plus"} size={24} color="#fff" />
+                            <AntDesign name={displayImageUri ? "close" : "plus"} size={24} color="#fff" />
                         </TouchableOpacity>
                     </LinearGradient>
                 </Animated.View>
             </View>
         );
-    }, [rotateAnim, isUploading, pickImage, handleDeletePress]);
+    }, [pickImage, handleDeletePress, isUploading, localImageUris, rotateAnimRefs]);
 
+
+    // --- THEN DEFINE slides, as it references renderImageItem ---
     const slides = [
         {
             id: "1",
@@ -296,10 +386,10 @@ const ProfileSetupScreen = () => {
                 <View style={styles.slide}>
                     <Text style={styles.title}>Let's get the Party Started</Text>
                     <Text style={styles.subtitle}>Let us get to know you, your interests, and set up your public profile.</Text>
-                    <Image 
-                        source={require("../assets/profilesetup/setup1.png")} 
-                        style={styles.image} 
-                        resizeMode="contain" 
+                    <Image
+                        source={require("../assets/profilesetup/setup1.png")}
+                        style={styles.image}
+                        resizeMode="contain"
                     />
                     <NextButton onPress={handleNext} label={"Get Started"} />
                 </View>
@@ -386,113 +476,48 @@ const ProfileSetupScreen = () => {
                 </View>
             ),
         },
-            {
-                id: "7",
-                gradientColors: ['#0367A6', '#D9043D'],
-                component: (
-                    <View style={styles.slide}>
-                        <Text style={styles.prompt}>Upload Profile Pictures</Text>
-                        <View style={styles.grid}>
-                        {profileData.profileImages.map((image, index) => {
-                            const rotateAnim = useRef(new Animated.Value(0)).current;
-
-                            const startRotation = () => {
-                                Animated.timing(rotateAnim, {
-                                    toValue: 1,
-                                    duration: 500,
-                                    useNativeDriver: true,
-                                }).start(() => rotateAnim.setValue(0));
-                            };
-                        
-                            const handleImageUpload = async () => {
-                                await pickImage(index);
-                                startRotation();
-                            };
-
-                            const handleDeletePress = async (index) => {
-                                const imageUrl = profileData.profileImages[index];
-                            
-                                // Check if there's an image to delete
-                                if (imageUrl) {
-                                    try {
-                                        // Extract the image name from the URL to get the reference in Firebase Storage
-                                        const imageName = `${auth.currentUser?.uid}_${index}.webp`; // Name the image based on userId_index
-                                        const userFolderPath = `profilePics/${auth.currentUser?.uid}`;
-                                        const imageRef = ref(storage, `${userFolderPath}/${imageName}`);
-                            
-                                        // Delete the image from Firebase Storage
-                                        await deleteObject(imageRef);
-                            
-                                        // Update the state by removing the image URL
-                                        setProfileData((prevData) => {
-                                            const newProfileImages = [...prevData.profileImages];
-                                            newProfileImages[index] = null;
-                                            return { ...prevData, profileImages: newProfileImages };
-                                        });
-                            
-                                        console.log("Image deleted successfully from Firebase");
-                                    } catch (error) {
-                                        console.error("Error deleting image from Firebase: ", error);
-                                    }
-                                }
-                            };
-                        
-                            const rotationInterpolate = rotateAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: ["0deg", "360deg"],
-                            });
-                        
-                            return (
-                                <View key={index} style={styles.uploadContainer}>
-                                    <TouchableOpacity style={styles.rectangle} onPress={() => pickImage(index)}>
-                                    {image ? (
-                                        <Image source={{ uri: image }} style={styles.profileImage} />
-                                    ) : (
-                                        <View style={styles.placeholder} />
-                                    )}
-                                </TouchableOpacity>
-                        
-                                    <Animated.View style={[styles.addIconContainer, { transform: [{ rotate: rotationInterpolate }] }]}>
-                                    <LinearGradient colors={["#F2BB47", "#D9043D"]} style={styles.addIconButton}>
-                                        <TouchableOpacity onPress={() => image ? handleDeletePress(index) : handleImageUpload()}>
-                                            <AntDesign name={image ? "close" : "plus"} size={24} color="#fff" />
-                                        </TouchableOpacity>
-                                    </LinearGradient>
-                                    </Animated.View>
-                                </View>
-                            );
-                        })}
-                        </View>
-                        <NextButton onPress={handleNext} label={"Continue"} />
+        {
+            id: "7",
+            gradientColors: ['#0367A6', '#D9043D'],
+            component: (
+                <View style={styles.slide}>
+                    <Text style={styles.prompt}>Upload Profile Pictures</Text>
+                    <View style={styles.grid}>
+                        {Array.isArray(profileData.profileImages) && profileData.profileImages.map((image, index) =>
+                            renderImageItem({ item: image, index })
+                        )}
                     </View>
-                ),
-            },
-            {
-                id: "8",
-                gradientColors: ['#0367A6', '#D9043D'],
-                component: (
-                    <View style={styles.slide}>
-                        <Text style={styles.prompt}>What's Your Bio?</Text>
-                        <View style={styles.bioContainer}>
-                            <TextInput
-                                style={styles.inputbio}
-                                placeholder="Information you want others to know about you"
-                                multiline
-                                value={profileData.bio}
-                                onChangeText={handleBioChange}
-                            />
-                            <LinearGradient colors={["#F2BB47", "#D9043D"]} style={styles.charCountContainer}>
-                                    <Text style={styles.charCountText}>
-                                        {profileData.bio.length}/500
-                                    </Text>
-                            </LinearGradient>
-                        </View>
-                        <Text style={styles.subtitle}>Your bio will be public</Text>
-                        <NextButton onPress={completeProfileSetup} label={"Continue"} />
+                    <NextButton onPress={handleNext} label={"Continue"} />
+                </View>
+            ),
+        },
+        {
+            id: "8",
+            gradientColors: ['#0367A6', '#D9043D'],
+            component: (
+                <View style={styles.slide}>
+                    <Text style={styles.prompt}>What's Your Bio?</Text>
+                    <View style={styles.bioContainer}>
+                        <TextInput
+                            style={styles.inputbio}
+                            placeholder="Information you want others to know about you"
+                            multiline
+                            value={profileData.bio}
+                            onChangeText={handleBioChange}
+                        />
+                        <LinearGradient colors={["#F2BB47", "#D9043D"]} style={styles.charCountContainer}>
+                            <Text style={styles.charCountText}>
+                                {profileData.bio.length}/500
+                            </Text>
+                        </LinearGradient>
                     </View>
-                ),
-            },
-        ];
+                    <Text style={styles.subtitle}>Your bio will be public</Text>
+                    <NextButton onPress={completeProfileSetup} label={"Complete Profile"} />
+                </View>
+            ),
+        },
+    ];
+
 
     return (
         <LinearGradient
@@ -506,8 +531,8 @@ const ProfileSetupScreen = () => {
                     <View style={styles.progressBarBackground}>
                         <LinearGradient
                             colors={['#F2BB47', '#D9043D']}
-                            style={[styles.progressBarFill, { 
-                                width: `${(currentIndex + 1) / slides.length * 80}%` 
+                            style={[styles.progressBarFill, {
+                                width: `${(currentIndex + 1) / (Array.isArray(slides) ? slides.length : 1) * 80}%`
                             }]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 0 }}
@@ -516,8 +541,8 @@ const ProfileSetupScreen = () => {
                 </View>
 
                 {currentIndex > 0 && (
-                    <TouchableOpacity 
-                        style={styles.backButton} 
+                    <TouchableOpacity
+                        style={styles.backButton}
                         onPress={handleBack}
                         accessibilityLabel="Go back"
                     >
@@ -595,7 +620,7 @@ const styles = StyleSheet.create({
         marginTop: 5,
         marginBottom: 10,
         textAlign: "left",
-        alignSelf: 'start',
+        alignSelf: 'flex-start',
     },
     subtitle: {
         fontSize: 14,

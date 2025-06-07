@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>312076107505-7laahrv1p1tgppqll6jr4hdb8097i348.apps.googleusercontent.com</string>
+	<string>312076107505-179lndsauc54im9ccov1elb6coraqu6q.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.312076107505-7laahrv1p1tgppqll6jr4hdb8097i348</string>
+	<string>com.googleusercontent.apps.312076107505-179lndsauc54im9ccov1elb6coraqu6q</string>
 	<key>ANDROID_CLIENT_ID</key>
 	<string>312076107505-v1iqm4sklus6bv2ga0h2415i3dem2ioj.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>host.exp.exponent</string>
+	<string>com.yourcompany.rauxa</string>
 	<key>PROJECT_ID</key>
 	<string>rauxa-8f9bf</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:312076107505:ios:3e6766a633b993a910f350</string>
+	<string>1:312076107505:ios:1e200073ea94953d10f350</string>
 </dict>
 </plist>

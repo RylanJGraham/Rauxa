@@ -1,86 +1,79 @@
-import React, { useState }  from 'react';
+import React, { useState } from 'react';
 import { Alert } from 'react-native';
-import { 
-    View, 
-    Text, 
-    TextInput, 
-    TouchableOpacity, 
-    Image, 
-    ScrollView, 
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Image,
+    ScrollView,
     SafeAreaView,
     StyleSheet,
-    Button,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import Icon from 'react-native-vector-icons/Feather';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../firebase'; // Import Firebase authentication & Firestore
-import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 const SignUpScreen = () => {
     const navigation = useNavigation();
-    const { signInWithGoogle, signInWithGithub } = useAuth(); // ⬅️ Added GitHub auth
+    // Destructure only Google and GitHub sign-in methods
+    const { signInWithGoogle, signInWithGithub } = useAuth(); // <-- REMOVED signInWithFacebook
 
-     // State variables for form inputs
-     const [username, setUsername] = useState('');
-     const [email, setEmail] = useState('');
-     const [mobile, setMobile] = useState('');
-     const [password, setPassword] = useState('');
+    // State variables for form inputs
+    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
+    const [mobile, setMobile] = useState('');
+    const [password, setPassword] = useState('');
 
     const socialIcons = [
-        { name: 'Apple', icon: require('../assets/login/apps/apple.png'), action: () => {} },
+        { name: 'Apple', icon: require('../assets/login/apps/apple.png'), action: () => Alert.alert("Coming Soon", "Apple Sign-In is not yet implemented.") },
         { name: 'Google', icon: require('../assets/login/apps/google.png'), action: signInWithGoogle },
-        { name: 'Facebook', icon: require('../assets/login/apps/facebook.png'), action: () => {} },
-        { name: 'GitHub', icon: require('../assets/login/apps/github.png'), action: signInWithGithub }, // ⬅️ GitHub button
-        { name: 'X', icon: require('../assets/login/apps/x.png'), action: () => {} },
+        // Removed Facebook social icon:
+        // { name: 'Facebook', icon: require('../assets/login/apps/facebook.png'), action: signInWithFacebook }, 
+        { name: 'GitHub', icon: require('../assets/login/apps/github.png'), action: signInWithGithub },
+        { name: 'X', icon: require('../assets/login/apps/x.png'), action: () => Alert.alert("Coming Soon", "X (Twitter) Sign-In is not yet implemented.") },
     ];
 
     const handleSignUp = async () => {
-        console.log("Sign Up Button Pressed!");  // Debugging line
         if (!username || !email || !mobile || !password) {
             Alert.alert('Error', 'All fields are required!');
             return;
         }
-    
+
         try {
-            // Check if username or email already exists
-            const usersRef = collection(db, 'users');
-            const q = query(usersRef, where('username', '==', username));
-            const emailQuery = query(usersRef, where('email', '==', email));
-    
-            const usernameSnapshot = await getDocs(q);
-            const emailSnapshot = await getDocs(emailQuery);
-    
-            if (!usernameSnapshot.empty) {
-                Alert.alert('Error', 'Username is already taken.');
-                return;
-            }
-    
-            if (!emailSnapshot.empty) {
+            const emailQuerySnapshot = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+            if (!emailQuerySnapshot.empty) {
                 Alert.alert('Error', 'An account with this email already exists.');
                 return;
             }
-    
-            // Create user in Firebase Authentication
+
+            const usernameQuerySnapshot = await getDocs(query(collection(db, 'usernames'), where('username', '==', username)));
+            if (!usernameQuerySnapshot.empty) {
+                Alert.alert('Error', 'Username is already taken.');
+                return;
+            }
+
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
-    
-            // Store additional user details in Firestore
+
             await setDoc(doc(db, 'users', user.uid), {
                 username,
                 email,
                 mobile,
                 uid: user.uid,
-                onboarded: false, // New field to track onboarding status
+                onboarded: false,
+                profileCreatedAt: new Date(),
             });
-            
-    
+            await setDoc(doc(db, 'usernames', username), { uid: user.uid });
+
             Alert.alert('Success', 'Account created successfully!');
-            navigation.navigate('Login'); // Navigate to Login after success
+            navigation.navigate('Login');
         } catch (error) {
-            console.log("Firebase Error:", error);  // Log error in Expo Go
+            console.error("Firebase Email/Password Sign-up Error:", error);
             Alert.alert('Sign Up Failed', error.message);
         }
     };
@@ -105,12 +98,12 @@ const SignUpScreen = () => {
                     <Text style={[styles.title, { color: 'white' }]}>Create Your Rauxa Account</Text>
 
                     <View style={styles.formContainer}>
-                    <View style={styles.inputContainer}>
+                        <View style={styles.inputContainer}>
                             <Icon name="user" size={20} color="#666" style={styles.inputIcon} />
-                            <TextInput 
-                                placeholder="Username" 
-                                style={styles.input} 
-                                placeholderTextColor="#666" 
+                            <TextInput
+                                placeholder="Username"
+                                style={styles.input}
+                                placeholderTextColor="#666"
                                 value={username}
                                 onChangeText={setUsername}
                             />
@@ -164,7 +157,7 @@ const SignUpScreen = () => {
                                 <TouchableOpacity
                                     key={icon.name}
                                     style={styles.socialButton}
-                                    onPress={icon.action} // ⬅️ Button action added
+                                    onPress={icon.action}
                                 >
                                     <Image source={icon.icon} style={styles.socialIcon} resizeMode="contain" />
                                 </TouchableOpacity>
@@ -230,6 +223,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#F2BB47',
         fontSize: 16,
+        color: 'white',
     },
     inputIcon: {
         position: 'absolute',

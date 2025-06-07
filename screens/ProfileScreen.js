@@ -6,12 +6,15 @@ import { LinearGradient } from "expo-linear-gradient";
 import ProfileImageGallery from "../components/profile/ProfileImageGallery";
 import ProfileButtons from "../components/profile/ProfileButtons";
 import ProfileEdit from "../components/profile/ProfileEdit";
+import SettingsModal from "../components/profile/SettingsModal"; // Import the SettingsModal
 import { signOut } from "firebase/auth";
+// Removed Ionicons import as it will now be in ProfileButtons.js
 
 const ProfileScreen = () => {
     const [profileData, setProfileData] = useState(null);
     const [viewMode, setViewMode] = useState("profile");
     const [activeIndex, setActiveIndex] = useState(0);
+    const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false); // New state for modal visibility
 
     useEffect(() => {
         const fetchProfile = async () => {
@@ -29,7 +32,7 @@ const ProfileScreen = () => {
                     }
                     if (!data.languages) {
                         data.languages = [];
-                      }
+                    }
                     setProfileData(data);
                 }
             }
@@ -40,8 +43,7 @@ const ProfileScreen = () => {
     const handleSaveProfile = async (updatedProfile) => {
         if (auth.currentUser) {
             const userRef = doc(db, "users", auth.currentUser.uid, "ProfileInfo", "userinfo");
-            
-            // Ensure all fields exist
+
             const completeProfile = {
                 ...updatedProfile,
                 education: updatedProfile.education || {
@@ -54,17 +56,29 @@ const ProfileScreen = () => {
 
             await updateDoc(userRef, completeProfile);
             setProfileData(completeProfile);
+            setViewMode("profile");
         }
     };
 
     const handleLogout = async () => {
         try {
             await signOut(auth);
-            // Navigation would typically be handled here if using React Navigation
-            // For example: navigation.navigate('Login');
+            console.log("User signed out successfully.");
+            // Assuming you have navigation to a login screen after logout
+            // navigation.replace('Login'); // Uncomment if you have navigation setup
         } catch (error) {
             console.error("Error signing out: ", error);
         }
+    };
+
+    // New function to open the settings modal
+    const handleOpenSettingsModal = () => {
+        setIsSettingsModalVisible(true);
+    };
+
+    // Function to close the settings modal
+    const handleCloseSettingsModal = () => {
+        setIsSettingsModalVisible(false);
     };
 
     if (!profileData) {
@@ -78,10 +92,12 @@ const ProfileScreen = () => {
     return (
         <LinearGradient colors={["#D9B779", "#736140"]} style={styles.container}>
             <View style={styles.topRow}>
-                <ProfileButtons setViewMode={setViewMode} viewMode={viewMode} />
-                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                    <Text style={styles.logoutText}>Logout</Text>
-                </TouchableOpacity>
+                <ProfileButtons
+                    setViewMode={setViewMode}
+                    viewMode={viewMode}
+                    handleLogout={handleLogout}
+                    handleOpenSettingsModal={handleOpenSettingsModal} // Pass the new function down
+                />
             </View>
 
             {viewMode === "profile" && (
@@ -97,6 +113,14 @@ const ProfileScreen = () => {
                     <ProfileEdit profileData={profileData} onSaveProfile={handleSaveProfile} />
                 </ScrollView>
             )}
+
+            {/* Render the SettingsModal */}
+            <SettingsModal
+                isVisible={isSettingsModalVisible}
+                onClose={handleCloseSettingsModal}
+                // If you use navigation inside the modal (e.g., after delete account)
+                // pass it down: navigation={navigation}
+            />
         </LinearGradient>
     );
 };
@@ -110,6 +134,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
+        backgroundColor: '#736140',
     },
     loadingText: {
         color: "white",
@@ -122,20 +147,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 20,
         paddingBottom: 10,
+        width: '100%',
     },
     scrollContainer: {
         flexGrow: 1,
     },
     scrollContent: {
         paddingBottom: 40,
-    },
-    logoutButton: {
-        padding: 10,
-    },
-    logoutText: {
-        color: "white",
-        fontSize: 16,
-        fontWeight: "bold",
     },
 });
 

@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
   paddingLeft: 0, // Adds inner padding
   paddingRight: 0, // Adds inner padding
   paddingTop: 60,
-   paddingBottom: 14,
+    paddingBottom: 14,
   borderRadius: 0,
   zIndex: 10,
   alignItems: 'center', // Center horizontally
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   },
   topRow: {
   flexDirection: 'column', // <-- change from 'row' to 'column'
-  alignItems: 'flex-start', 
+  alignItems: 'flex-start',
   marginBottom: 4,
   paddingHorizontal: 20,
   width: '100%',
@@ -429,12 +429,12 @@ tagsOverlay: {
   top: 210,
   right: 0,
   padding: 12,
-  backgroundColor: '#0367A6', // outer blue background
+  backgroundColor: 'transparent', // Changed from '#0367A6' to transparent
   borderTopLeftRadius: 20,
   borderBottomLeftRadius: 20,
   flexDirection: 'row',
 
-   // (iOS)
+    // (iOS)
   shadowColor: '#000',
   shadowOffset: {
     width: 0,
@@ -454,7 +454,7 @@ tagsContainer: {
 },
 
 tag: {
-  backgroundColor: '#D9043D', // red pill
+  backgroundColor: '#0367A6', // Changed from '#D9043D' (red) to '#0367A6' (blue)
   paddingHorizontal: 10,
   paddingVertical: 10,
   borderRadius: 12,

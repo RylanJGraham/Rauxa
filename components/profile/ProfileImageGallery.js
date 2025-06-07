@@ -6,6 +6,11 @@ const { width } = Dimensions.get('window');
 const ProfileImageGallery = ({ profileData, activeIndex, setActiveIndex }) => {
   const filteredImages = profileData.profileImages ? profileData.profileImages.filter(img => img) : [];
 
+  // Consistent font sizes
+  const FONT_SIZE_LARGE = 28; // For Name
+  const FONT_SIZE_MEDIUM = 18; // For Age, Gender, Education, Song Info
+  const FONT_SIZE_SMALL = 16; // For Bio, Tags, Section Titles (though titles are removed, used for consistency)
+
   return (
     <View style={styles.galleryContainer}>
       <FlatList
@@ -14,7 +19,7 @@ const ProfileImageGallery = ({ profileData, activeIndex, setActiveIndex }) => {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={(event) => {
-          const index = Math.round(event.nativeEvent.contentOffset.x / (width * 0.8));
+          const index = Math.round(event.nativeEvent.contentOffset.x / (width * 0.9));
           setActiveIndex(index);
         }}
         keyExtractor={(item, index) => index.toString()}
@@ -26,38 +31,27 @@ const ProfileImageGallery = ({ profileData, activeIndex, setActiveIndex }) => {
             // First photo: Name, Age, Gender
             overlayContent = (
               <View style={styles.overlay}>
-                <Text style={styles.overlayTextLarge}>
+                <Text style={styles.overlayTextName}>
                   {profileData.displayFirstName} {profileData.displayLastName}
                 </Text>
-                <Text style={styles.overlayTextMedium}>{profileData.age}, {profileData.gender || 'Not provided'}</Text>
+                <Text style={styles.overlayTextDetails}>
+                  {profileData.age}, {profileData.gender || 'Not provided'}
+                </Text>
               </View>
             );
           } else if (index === 1) {
-            // Second photo: Bio and Languages
+            // Second photo: Bio only
             overlayContent = (
               <View style={styles.overlay}>
-                <Text style={styles.overlayTextSmall}>{profileData.bio || 'No bio provided.'}</Text>
+                {profileData.bio ? (
+                  <Text style={styles.overlayTextBio}>{profileData.bio}</Text>
+                ) : (
+                  <Text style={styles.noContentText}>No bio provided.</Text>
+                )}
               </View>
             );
           } else if (index === 2) {
-            // Third photo: Interests
-            overlayContent = (
-              <View style={styles.overlay}>
-                <View style={styles.tagsContainer}>
-                  {profileData.interests && profileData.interests.length > 0 ? (
-                    <View style={styles.tagsRow}>
-                      {profileData.interests.map((interest, idx) => (
-                        <Text key={idx} style={styles.tagText}>{interest}</Text>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={styles.noContentText}>No interests added.</Text>
-                  )}
-                </View>
-              </View>
-            );
-          } else if (index === 3) {
-            // Fourth photo: Education and Top Songs
+            // Third photo: Education then Languages
             overlayContent = (
               <View style={styles.overlay}>
                 {profileData.education?.university && (
@@ -69,26 +63,47 @@ const ProfileImageGallery = ({ profileData, activeIndex, setActiveIndex }) => {
                   <View style={styles.tagsContainer}>
                     <View style={styles.tagsRow}>
                       {profileData.languages.map((language, idx) => (
-                        <Text key={idx} style={styles.tagText}>{language}</Text>
+                        <Text key={idx} style={styles.tag}>{language}</Text>
                       ))}
                     </View>
                   </View>
                 )}
+                {!profileData.education?.university && (!profileData.languages || profileData.languages.length === 0) && (
+                    <Text style={styles.noContentText}>No education or languages added.</Text>
+                )}
+              </View>
+            );
+          } else if (index === 3) {
+            // Fourth photo: Interests (tags only)
+            overlayContent = (
+              <View style={styles.overlay}>
+                <View style={styles.tagsContainer}>
+                  {profileData.interests && profileData.interests.length > 0 ? (
+                    <View style={styles.tagsRow}>
+                      {profileData.interests.map((interest, idx) => (
+                        <Text key={idx} style={styles.tag}>{interest}</Text>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.noContentText}>No interests added.</Text>
+                  )}
+                </View>
               </View>
             );
           } else if (index === 4) {
-            // Fourth photo: Education and Top Songs
+            // Fifth photo: Top Songs (music)
             overlayContent = (
               <View style={styles.overlay}>
-                {profileData.topSongs && profileData.topSongs.length > 0 && (
+                {profileData.topSongs && profileData.topSongs.length > 0 ? (
                   <View style={styles.infoSection}>
-                    <Text style={styles.sectionTitle}>Top Songs:</Text>
                     {profileData.topSongs.slice(0, 3).map((song, idx) => (
                       <Text key={idx} style={styles.infoText}>
                         {song.name} • {song.artist}
                       </Text>
                     ))}
                   </View>
+                ) : (
+                  <Text style={styles.noContentText}>No top songs added.</Text>
                 )}
               </View>
             );
@@ -108,7 +123,7 @@ const ProfileImageGallery = ({ profileData, activeIndex, setActiveIndex }) => {
             key={index}
             style={{
               ...styles.indicator,
-              width: `${60 / filteredImages.length}%`, 
+              width: (width * 0.9 / filteredImages.length) - (styles.indicator.marginHorizontal * 2),
               backgroundColor: index === activeIndex ? '#D9043D' : '#730220',
             }}
           />
@@ -120,103 +135,110 @@ const ProfileImageGallery = ({ profileData, activeIndex, setActiveIndex }) => {
 
 const styles = StyleSheet.create({
   galleryContainer: {
-    width: '90%',
+    width: width * 0.9,
     alignSelf: 'center',
     overflow: 'hidden',
     marginTop: 0,
     borderRadius: 40,
+    aspectRatio: 0.9 / 1.6,
   },
   profileImage: {
     width: width * 0.9,
     height: width * 1.6,
     resizeMode: 'cover',
+    borderRadius: 40,
   },
   indicatorContainer: {
     flexDirection: 'row',
     position: 'absolute',
-    top: 2,
+    top: 10,
     left: 0,
     right: 0,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   indicator: {
     height: 4,
-    margin: 6,
     borderRadius: 3,
+    flex: 1,
+    marginHorizontal: 2,
   },
   imageContainer: {
     position: 'relative',
+    width: width * 0.9,
+    height: width * 1.6,
   },
   overlay: {
     position: 'absolute',
     bottom: 20,
-    left: 10,
-    right: 10,
+    left: 20,
+    right: 20,
     padding: 15,
     backgroundColor: 'rgba(0, 0, 0, 0.0)',
     borderRadius: 15,
   },
-  overlayText: {
-    fontSize: 24,
+  // Consistent Text Styles
+  overlayTextName: {
+    fontSize: 28, // Large for name
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 5,
   },
-  overlayTextLarge: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
-  },
-  overlayTextMedium: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
-  },
-  overlayTextSmall: {
-    fontSize: 14,
+  overlayTextDetails: {
+    fontSize: 18, // Medium for age, gender
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 0,
   },
+  overlayTextBio: {
+    fontSize: 16, // Small for bio
+    color: 'white',
+    lineHeight: 22,
+    // No specific margin bottom here as it's the only content on its slide
+  },
+  // sectionTitle style is kept but not actively used in the current render logic for content pages
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#F2BB47',
-    marginBottom: 5,
+    marginBottom: 10,
   },
+  infoSection: {
+    marginBottom: 10, // Space between education and languages/music sections if they are stacked
+  },
+  infoText: {
+    fontSize: 18, // Medium for education, song details
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 5, // Small margin between lines of info
+  },
+  noContentText: {
+    fontSize: 16, // Small for "no content" messages
+    color: 'white',
+    fontStyle: 'italic',
+    paddingVertical: 5,
+  },
+
+  // Tags Styling
   tagsContainer: {
-    marginTop: 5,
+    marginTop: 0, // No top margin if no title
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    justifyContent: 'flex-start',
   },
-  tagText: {
-    fontSize: 14,
+  tag: {
+    fontSize: 14, // Consistent small size for tags
     color: 'white',
-    backgroundColor: '#D9043D80',
+    backgroundColor: '#0367A6', // Solid blue background
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 8,
-    margin: 3,
+    borderRadius: 15, // More rounded corners for pill shape
+    margin: 4, // Consistent margin around tags
     fontWeight: "bold",
-  },
-  infoSection: {
-    marginBottom: 0,
-  },
-  infoText: {
-    fontSize: 18,
-    fontWeight: "Bold",
-    color: 'white',
-    marginBottom: 0,
-  },
-  noContentText: {
-    fontSize: 14,
-    color: 'white',
-    fontStyle: 'italic',
+    overflow: 'hidden',
   },
 });
 

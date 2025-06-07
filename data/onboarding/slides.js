@@ -39,4 +39,13 @@ export const slides = [
         subtitle: "You're all set! Join the Spontaneity Revolution!",
         gradientColors: ['#0367A6', '#D9043D'],
     },
+    {
+        // --- NEW TOS SLIDE ---
+        id: "TOS", // Use a unique ID like "TOS"
+        image: null, // No image for TOS slide
+        title: [], // No title for TOS slide
+        subtitle: "", // No subtitle for TOS slide
+        highlightWords: [],
+        gradientColors: ["#0367A6", "#012840"], // Choose your desired background gradient for the TOS screen
+    },
 ];

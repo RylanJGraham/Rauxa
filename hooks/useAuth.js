@@ -1,66 +1,215 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
+import {
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    GoogleAuthProvider,
+    GithubAuthProvider,
+    signInWithCredential,
 } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { Alert, Text } from 'react-native';
+import { makeRedirectUri } from 'expo-auth-session'; // Ensure this is imported
+
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [isInitializing, setIsInitializing] = useState(true);
+    const manifest = Constants.manifest2?.extra?.expoClient?.extra || Constants.manifest?.extra;
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      if (isInitializing) setIsInitializing(false);
-    });
-    return unsubscribe;
-  }, []);
+    if (!manifest) {
+        console.error("Expo manifest (app.json) 'extra' section not found or loaded. Cannot initialize AuthProvider.");
+        return (
+            <AuthContext.Provider value={{ user: null, isInitializing: true }}>
+                <Text style={{ color: 'red', textAlign: 'center', marginTop: 50 }}>
+                    Error: App configuration not loaded. Please ensure app.json is valid and restart.
+                </Text>
+            </AuthContext.Provider>
+        );
+    }
 
-  const signUpWithEmail = async (email, password) => {
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error('Sign up failed:', error.message);
-      throw error;
-    }
-  };
+    // --- DEFINE ALL NECESSARY VARIABLES FIRST ---
+    const webClientId = manifest.webClientId;
+    const androidClientId = manifest.androidClientId;
+    const iosClientId = manifest.iosClientId;
+    const githubClientId = manifest.githubClientId;
+    const githubClientSecret = manifest.githubClientSecret;
 
-  const signInWithEmail = async (email, password) => {
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error) {
-      console.error('Sign in failed:', error.message);
-      throw error;
-    }
-  };
+    const expoScheme = Constants.manifest2?.extra?.expoClient?.scheme || Constants.manifest?.scheme;
 
-  const signOutUser = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error('Sign out failed:', error.message);
-      throw error;
-    }
-  };
+    // *** IMPORTANT CHANGE HERE ***
+    // We are specifying the scheme and NOT using the proxy for native builds.
+    const redirectUri = makeRedirectUri({
+        scheme: expoScheme, // This will correctly resolve to 'rauxa' from your app.json
+        // NO useProxy: true here, as we are targeting standalone native builds
+    });
+    // ***************************
 
-  return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        isInitializing,
-        signInWithEmail, 
-        signUpWithEmail, 
-        signOutUser 
-      }}
-    >
-      {!isInitializing && children}
-    </AuthContext.Provider>
-  );
+    const [user, setUser] = useState(null);
+    const [isInitializing, setIsInitializing] = useState(true);
+
+    const [requestGoogle, responseGoogle, promptAsyncGoogle] = Google.useAuthRequest({
+        androidClientId: androidClientId,
+        iosClientId: iosClientId,
+        webClientId: webClientId,
+        scopes: ['profile', 'email'],
+        redirectUri: redirectUri, // Now correctly uses 'rauxa://oauth' or similar
+    });
+
+    const [requestGithub, responseGithub, promptAsyncGithub] = Google.useAuthRequest(
+        {
+            clientId: githubClientId,
+            scopes: ['user', 'user:email'],
+            redirectUri: redirectUri, // Use the same redirectUri for GitHub
+        },
+        {
+            authorizationEndpoint: 'https://github.com/login/oauth/authorize',
+            tokenEndpoint: 'https://github.com/login/oauth/access_token',
+        }
+    );
+
+    // ... (rest of your useEffect, signUpWithEmail, signInWithEmail, signOutUser, signInWithGoogle, signInWithGithub functions, and return statement) ...
+    // The rest of the file remains unchanged as you provided it after the reordering fix.
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            setUser(firebaseUser);
+            setIsInitializing(false);
+
+            if (firebaseUser) {
+                const userDocRef = doc(db, 'users', firebaseUser.uid);
+                const userDocSnap = await getDoc(userDocRef);
+
+                if (!userDocSnap.exists()) {
+                    let username = firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : `user-${firebaseUser.uid.substring(0, 8)}`);
+                    if (username.length > 20) {
+                        username = username.substring(0, 20);
+                    }
+
+                    let finalUsername = username;
+                    let suffix = 0;
+                    while (true) {
+                        const checkUsernameRef = doc(db, 'usernames', finalUsername);
+                        const checkUsernameSnap = await getDoc(checkUsernameRef);
+                        if (!checkUsernameSnap.exists()) {
+                            break;
+                        }
+                        suffix++;
+                        finalUsername = `${username}${suffix}`;
+                        if (finalUsername.length > 20) {
+                            finalUsername = `${username.substring(0, 16)}${suffix}`;
+                        }
+                    }
+
+                    await setDoc(userDocRef, {
+                        uid: firebaseUser.uid,
+                        email: firebaseUser.email || null,
+                        username: finalUsername,
+                        onboarded: false,
+                        profileCreatedAt: new Date(),
+                    });
+                    await setDoc(doc(db, 'usernames', finalUsername), { uid: firebaseUser.uid });
+                }
+            }
+        });
+        return unsubscribe;
+    }, []);
+
+    const signUpWithEmail = async (email, password) => {
+        try {
+            await createUserWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+            console.error('Sign up failed:', error.message);
+            throw error;
+        }
+    };
+
+    const signInWithEmail = async (email, password) => {
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+            console.error('Sign in failed:', error.message);
+            throw error;
+        }
+    };
+
+    const signOutUser = async () => {
+        try {
+            await signOut(auth);
+        } catch (error) {
+            console.error('Sign out failed:', error.message);
+            throw error;
+        }
+    };
+
+    const signInWithGoogle = async () => {
+        try {
+            const result = await promptAsyncGoogle();
+            if (result.type === 'success') {
+                const { authentication } = result;
+                if (authentication?.idToken) {
+                    const credential = GoogleAuthProvider.credential(authentication.idToken);
+                    await signInWithCredential(auth, credential);
+                } else {
+                    Alert.alert('Google Sign-In Failed', 'Could not retrieve ID token from Google.');
+                }
+            } else if (result.type === 'cancel') {
+                Alert.alert('Google Sign-In Cancelled', 'You cancelled the Google sign-in process.');
+            } else if (result.type === 'error') {
+                Alert.alert('Google Sign-In Error', `Authentication failed: ${result.error?.message || 'Unknown error'}`);
+                console.error('Google sign-in error:', result.error);
+            }
+        } catch (error) {
+            console.error('Google sign-in initiation failed:', error);
+            Alert.alert('Google Sign-In Error', 'Failed to initiate Google sign-in. Please try again.');
+        }
+    };
+
+    const signInWithGithub = async () => {
+        try {
+            const result = await promptAsyncGithub();
+            if (result.type === 'success') {
+                const { authentication } = result;
+                if (authentication?.accessToken) {
+                    const credential = GithubAuthProvider.credential(authentication.accessToken);
+                    await signInWithCredential(auth, credential);
+
+                } else {
+                    Alert.alert('GitHub Sign-In Failed', 'Could not get GitHub access token or code.');
+                }
+            } else if (result.type === 'cancel') {
+                Alert.alert('GitHub Sign-In Cancelled', 'You cancelled the GitHub sign-in process.');
+            } else if (result.type === 'error') {
+                Alert.alert('GitHub Sign-In Error', `Authentication failed: ${result.error?.message || 'Unknown error'}`);
+                console.error('GitHub sign-in error:', result.error);
+            }
+        } catch (error) {
+            console.error('GitHub sign-in initiation failed:', error);
+            Alert.alert('GitHub Sign-In Error', 'Failed to initiate GitHub sign-in. Please try again.');
+        }
+    };
+
+    return (
+        <AuthContext.Provider
+            value={{
+                user,
+                isInitializing,
+                signInWithEmail,
+                signUpWithEmail,
+                signOutUser,
+                signInWithGoogle,
+                signInWithGithub,
+            }}
+        >
+            {!isInitializing && children}
+        </AuthContext.Provider>
+    );
 };
 
 export const useAuth = () => useContext(AuthContext);
