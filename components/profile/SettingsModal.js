@@ -98,7 +98,8 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
 
                     <Text style={styles.modalTitle}>Settings</Text>
 
-                    <ScrollView style={styles.settingsScroll}>
+                    {/* Added showsVerticalScrollIndicator={false} prop */}
+                    <ScrollView style={styles.settingsScroll} showsVerticalScrollIndicator={false}>
                         {/* Account Section */}
                         <Text style={styles.sectionTitle}>Account</Text>
                         <TouchableOpacity style={styles.settingItem} onPress={() => Alert.alert("Change Password", "Feature to change password will be here.")}>

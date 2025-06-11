@@ -89,7 +89,7 @@ const SignUpScreen = () => {
                 <ScrollView contentContainerStyle={styles.scrollContent}>
                     <View style={styles.logoContainer}>
                         <Image
-                            source={require('../assets/login/Login_Logo.png')}
+                            source={require('../assets/onboarding/Onboarding1.png')}
                             style={styles.logo}
                             resizeMode="contain"
                         />

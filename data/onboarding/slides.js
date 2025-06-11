@@ -34,7 +34,7 @@ export const slides = [
     {
         id: "5",
         image: require("../../assets/onboarding/Onboarding5.png"),
-        title: ["Get Started ", "Now"],
+        title: ["Get Started on Rauxa ", "Now"],
         highlightWords: ["Now"], 
         subtitle: "You're all set! Join the Spontaneity Revolution!",
         gradientColors: ['#0367A6', '#D9043D'],

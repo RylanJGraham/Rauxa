@@ -6,7 +6,7 @@ import { doc, updateDoc, Timestamp } from "firebase/firestore"; // Import Timest
 import { LinearGradient } from "expo-linear-gradient";
 import { slides } from "../data/onboarding/slides"; // Make sure to update this file with the new slide data
 import NextButton from "../components/onboarding-components/NextButton";
-import PaginationDots from "../components/onboarding-components/PaginationDots";
+import PaginationDots from "../components/onboarding-components/PaginationDots"; // Corrected path
 
 const { width, height } = Dimensions.get("window");
 
@@ -52,7 +52,7 @@ const OnboardingScreen = () => {
             <LinearGradient
                 key={item.id}
                 colors={item.gradientColors}
-                style={styles.slide}
+                style={styles.slide} // This style now uses flex: 1
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
             >
@@ -149,17 +149,16 @@ const OnboardingScreen = () => {
 
 const styles = StyleSheet.create({
     container: {
-        flex: 1,
+        flex: 1, // Make the container fill the whole screen
         alignItems: "center",
         justifyContent: "center",
     },
     slide: {
-        flex: 1,
-        width,
+        flex: 1, // Make the LinearGradient fill its parent (the FlatList item)
+        width, // Maintain width based on screen width
         justifyContent: "center",
         alignItems: "center",
         padding: 0,
-        height: height,
     },
     image: {
         width: width,

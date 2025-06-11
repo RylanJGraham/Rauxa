@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome } from '@expo/vector-icons'; // Keeping FontAwesome for now, but Ionicons is used elsewhere
 
 const SearchBar = ({ value, onChangeText, onFilterPress, isFilterActive }) => {
   return (
@@ -8,7 +8,8 @@ const SearchBar = ({ value, onChangeText, onFilterPress, isFilterActive }) => {
       {/* Search Input */}
       <TextInput
         style={styles.searchBar}
-        placeholder="Search events by title..."
+        placeholder="Search for meetup inspo..."
+        placeholderTextColor="#EAEAEA80" // Changed placeholder color for better visibility on dark background
         value={value}
         onChangeText={onChangeText}
       />
@@ -26,14 +27,20 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     flex: 1,
-    borderWidth: 2,
-    borderColor: '#F2BB47',
-    borderRadius: 20,
-    backgroundColor: '#00000060',
-    color: 'white',
+    borderWidth: 1.5, // Slightly less thick border
+    borderColor: '#FFF', // Matching the filter modal's background gradient start color for harmony
+    borderRadius: 15, // Slightly less rounded corners to match modal
+    backgroundColor: '#333333', // A darker, but not black, background for depth
+    color: '#EAEAEA', // Light text color for contrast
     textAlign: 'left',
     fontSize: 16,
-    padding: 16,
+    paddingVertical: 12, // Reduced vertical padding slightly
+    paddingHorizontal: 16,
+    shadowColor: "#000", // Added shadow for a subtle lift
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
 

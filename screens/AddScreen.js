@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, StyleSheet, View, Alert } from "react-native";
-import { useNavigation } from "@react-navigation/core";
+import { ScrollView, Text, TouchableOpacity, StyleSheet, View, Alert, BackHandler } from "react-native";
+// import { useNavigation } from "@react-navigation/core"; // No longer needed here if all navigation handled by props
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { LinearGradient } from "expo-linear-gradient";
@@ -9,6 +9,8 @@ import FilterModal from "../components/meetups/FiltersModal";
 import EventCard from "../components/meetups/EventCard";
 import SponsoredEventCard from "../components/meetups/SponsoredEventCard";
 import { Ionicons } from '@expo/vector-icons';
+// No longer import EventDetailsModal or CreateMeetupScreen directly here,
+// as they are managed by TabNavigator and passed via props.
 
 const tags = [
   "Music", "Sports", "Karaoke", "Clubs", "Beach", "Dating",
@@ -16,37 +18,67 @@ const tags = [
   "Art", "Theater", "Movies", "Volunteer", "Meetups", "Video Games", "Tourism"
 ];
 
-const groupSizes = [2, 4, 6, 10, 20];
+const groupSizes = Array.from({ length: 25 }, (_, i) => (i + 1) * 2);
 
-const MeetupScreen = () => {
-  const navigation = useNavigation();
-  const [recommendedMeetups, setRecommendedMeetups] = useState([]);
-  const [sponsoredMeetups, setSponsoredMeetups] = useState([]);
-  const [filteredMeetups, setFilteredMeetups] = useState([]);
+// MeetupScreen now accepts onOpenEventDetailsModal and onOpenCreateMeetupModal as props
+const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
+  // const navigation = useNavigation(); // Remove if not directly navigating elsewhere
+  const [allRecommendedMeetups, setAllRecommendedMeetups] = useState([]);
+  const [allSponsoredMeetups, setAllSponsoredMeetups] = useState([]);
+
+  const [filteredRecommendedMeetups, setFilteredRecommendedMeetups] = useState([]);
+  const [filteredSponsoredMeetups, setFilteredSponsoredMeetups] = useState([]);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTags, setSelectedTags] = useState([]);
   const [selectedGroupSize, setSelectedGroupSize] = useState(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
 
+  // Removed isEventDetailsModalVisible, selectedEventId, selectedSourceCollection,
+  // isCreateMeetupModalVisible, createMeetupMode, createMeetupEventData
+
+  const isFilterActive = searchTerm !== "" || selectedTags.length > 0 || selectedGroupSize !== null;
+
+  // Handle Android back button for FilterModal only now
+  useEffect(() => {
+    const backAction = () => {
+      if (isFilterVisible) {
+        setIsFilterVisible(false);
+        return true; // Consume the back button press
+      }
+      return false; // Let default back button behavior happen for other navigation
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [isFilterVisible]);
+
+
   useEffect(() => {
     const fetchMeetups = async () => {
       try {
-        // Fetch recommended meetups
         const recommendedSnapshot = await getDocs(collection(db, "meetups", "Recommended_Meetups", "events"));
         const recommendedData = recommendedSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          sourceCollection: "Recommended_Meetups",
         }));
-        setRecommendedMeetups(recommendedData);
-        setFilteredMeetups(recommendedData);
+        setAllRecommendedMeetups(recommendedData);
+        setFilteredRecommendedMeetups(recommendedData);
 
-        // Fetch sponsored meetups
         const sponsoredSnapshot = await getDocs(collection(db, "meetups", "Sponsored_Meetups", "events"));
         const sponsoredData = sponsoredSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          sourceCollection: "Sponsored_Meetups",
         }));
-        setSponsoredMeetups(sponsoredData);
+        setAllSponsoredMeetups(sponsoredData);
+        setFilteredSponsoredMeetups(sponsoredData);
+
       } catch (error) {
         console.error("Error fetching meetups:", error);
         Alert.alert("Error", "Failed to load meetups");
@@ -56,45 +88,65 @@ const MeetupScreen = () => {
     fetchMeetups();
   }, []);
 
+  useEffect(() => {
+    applyAllFilters(searchTerm, selectedTags, selectedGroupSize);
+  }, [searchTerm, selectedTags, selectedGroupSize, allRecommendedMeetups, allSponsoredMeetups]);
+
+
   const handleSearch = (text) => {
     setSearchTerm(text);
-    filterEvents(text, selectedTags, selectedGroupSize);
   };
 
   const handleTagFilter = (tag) => {
     const updatedSelectedTags = selectedTags.includes(tag)
       ? selectedTags.filter((selectedTag) => selectedTag !== tag)
       : [...selectedTags, tag];
-
     setSelectedTags(updatedSelectedTags);
-    filterEvents(searchTerm, updatedSelectedTags, selectedGroupSize);
   };
 
   const handleGroupSizeSelect = (size) => {
     setSelectedGroupSize(size);
-    filterEvents(searchTerm, selectedTags, size);
   };
 
-  const filterEvents = (searchTerm, tags, groupSize) => {
-    let filtered = recommendedMeetups;
-
-    if (searchTerm) {
-      filtered = filtered.filter((event) =>
-        event.title.toLowerCase().includes(searchTerm.toLowerCase())
+  const applyAllFilters = (currentSearchTerm, currentTags, currentGroupSize) => {
+    let filteredRec = allRecommendedMeetups;
+    if (currentSearchTerm) {
+      filteredRec = filteredRec.filter((event) =>
+        event.title.toLowerCase().includes(currentSearchTerm.toLowerCase())
       );
     }
-
-    if (tags.length > 0) {
-      filtered = filtered.filter((event) =>
-        event.tags.some((tag) => tags.includes(tag))
+    if (currentTags.length > 0) {
+      filteredRec = filteredRec.filter((event) =>
+        event.tags && event.tags.some((tag) => currentTags.includes(tag))
       );
     }
-
-    if (groupSize) {
-      filtered = filtered.filter((event) => event.groupSize <= groupSize);
+    if (currentGroupSize) {
+      filteredRec = filteredRec.filter((event) => event.groupSize <= currentGroupSize);
     }
+    setFilteredRecommendedMeetups(filteredRec);
 
-    setFilteredMeetups(filtered);
+    let filteredSpon = allSponsoredMeetups;
+    if (currentSearchTerm) {
+      filteredSpon = filteredSpon.filter((event) =>
+        event.title.toLowerCase().includes(currentSearchTerm.toLowerCase())
+      );
+    }
+    if (currentTags.length > 0) {
+      filteredSpon = filteredSpon.filter((event) =>
+        event.tags && event.tags.some((tag) => currentTags.includes(tag))
+      );
+    }
+    if (currentGroupSize) {
+      filteredSpon = filteredSpon.filter((event) => event.groupSize <= currentGroupSize);
+    }
+    setFilteredSponsoredMeetups(filteredSpon);
+  };
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setSelectedTags([]);
+    setSelectedGroupSize(null);
+    setIsFilterVisible(false);
   };
 
   const toggleFilterVisibility = () => {
@@ -106,12 +158,18 @@ const MeetupScreen = () => {
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={styles.searchFilterContainer}>
           <SearchBar value={searchTerm} onChangeText={handleSearch} />
-          
-          <TouchableOpacity onPress={toggleFilterVisibility} style={styles.filterButton}>
-            <Ionicons 
-              name="filter" 
-              size={24} 
-              color={selectedTags.length > 0 || selectedGroupSize ? "red" : "#0367A6"}
+
+          <TouchableOpacity
+            onPress={toggleFilterVisibility}
+            style={[
+              styles.filterButton,
+              isFilterActive ? styles.filterButtonActive : styles.filterButtonInactive
+            ]}
+          >
+            <Ionicons
+              name="filter"
+              size={24}
+              color={isFilterActive ? "#D9043D" : "#0367A6"}
             />
           </TouchableOpacity>
         </View>
@@ -126,47 +184,54 @@ const MeetupScreen = () => {
               selectedGroupSize={selectedGroupSize}
               onGroupSizeSelect={handleGroupSizeSelect}
               onClose={() => setIsFilterVisible(false)}
+              onResetFilters={handleResetFilters}
             />
           </View>
         )}
 
-        <Text style={styles.title}>Sponsored Meetups</Text>
-        {sponsoredMeetups.length > 0 ? (
+        <Text style={styles.title}>Sponsored Meetup Ideas</Text>
+        {filteredSponsoredMeetups.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
-            {sponsoredMeetups.map((item) => (
+            {filteredSponsoredMeetups.map((item) => (
               <SponsoredEventCard
                 key={item.id}
                 event={item}
-                onPress={() => navigation.navigate("EventDetails", { eventId: item.id })}
+                // Call the prop function
+                onPress={() => onOpenEventDetailsModal(item.id, item.sourceCollection)}
               />
             ))}
           </ScrollView>
         ) : (
-          <Text style={styles.noEventsText}>No sponsored events available, stay tuned!</Text>
+          <Text style={styles.noEventsText}>No sponsored events match your filters.</Text>
         )}
 
-        <Text style={styles.title}>Recommended Meetups</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
-          {filteredMeetups.map((item) => (
-            <EventCard
-              key={item.id}
-              event={item}
-              onPress={() => navigation.navigate("EventDetails", { eventId: item.id })}
-            />
-          ))}
-        </ScrollView>
+        <Text style={styles.title}>Rauxa Meetup Ideas</Text>
+        {filteredRecommendedMeetups.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventsGallery}>
+            {filteredRecommendedMeetups.map((item) => (
+              <EventCard
+                key={item.id}
+                event={item}
+                // Call the prop function
+                onPress={() => onOpenEventDetailsModal(item.id, item.sourceCollection)}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={styles.noEventsText}>No recommended events match your filters.</Text>
+        )}
 
-        
-
-         {/* Create Meetup Button */}
-         <Text style={styles.title}>Got Your Own Idea?</Text>
-         <TouchableOpacity
+        <Text style={styles.title}>Got Your Own Idea?</Text>
+        <TouchableOpacity
           style={styles.createButton}
-          onPress={() => navigation.navigate('CreateMeetup')}
+          // Call the prop function
+          onPress={() => onOpenCreateMeetupModal('create', {})}
         >
           <Text style={styles.createButtonText}>Create Your Own Meetup!</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* EventDetailsModal and CreateMeetupScreen are now rendered by TabNavigator */}
     </LinearGradient>
   );
 };
@@ -180,14 +245,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 50, 
+    marginTop: 50,
     paddingLeft: 20,
     paddingRight: 20,
   },
   filterButton: {
     padding: 10,
     borderRadius: 50,
-    backgroundColor: "#fff",
+  },
+  filterButtonActive: {
+    backgroundColor: '#000',
+  },
+  filterButtonInactive: {
+    backgroundColor: '#fff',
   },
   title: {
     fontSize: 24,

@@ -1,117 +1,152 @@
-import React, { useState, useEffect } from 'react';
-import { Linking, Platform, Alert, View, ScrollView, TouchableOpacity, Text, StyleSheet, TextInput, Image, Dimensions } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Alert, View, ScrollView, TouchableOpacity, Text, StyleSheet, Dimensions, Platform, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { addDoc, collection, doc, getDoc } from 'firebase/firestore';
+// Ionicons is no longer needed directly in CreateMeetupScreen if only used for the close button
+// import { Ionicons } from '@expo/vector-icons';
+import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db } from '../firebase';
-import PixabayModal from '../components/create/PixabayModal';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from 'expo-image-manipulator';
 import * as ImageManipulator from 'expo-image-manipulator';
+import dayjs from 'dayjs';
 
-const { width } = Dimensions.get('window');
+import GallerySection from '../components/create/GallerySection';
+import FieldsSection from '../components/create/FieldsSection';
+import GenericEditModal from '../components/create/GenericEditModal';
+import HostInfo from '../components/create/HostInfo';
+import PixabayModal from '../components/create/PixabayModal';
+import PreviewModal from '../components/create/PreviewModal';
+import TagSelectionModal from '../components/create/TagSelectionModal';
 
-const CreateMeetupScreen = () => {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { mode, eventData } = route.params || {};
-  const [isEditing, setIsEditing] = useState(mode === 'edit');
+const { width: screenWidth, height: screenHeight } = Dimensions.get('screen');
 
+const CreateMeetupScreen = ({ isVisible, onClose, eventData, mode }) => {
+  // State variables for event details, initialized from eventData or empty
   const [title, setTitle] = useState(eventData?.title || '');
-  const [date, setDate] = useState(eventData?.date || '');
-  const [time, setTime] = useState(eventData?.time || '');
+  const [selectedDate, setSelectedDate] = useState(null);
   const [groupSize, setGroupSize] = useState(eventData?.groupSize?.toString() || '');
   const [location, setLocation] = useState(eventData?.location || '');
   const [tags, setTags] = useState(eventData?.tags || []);
   const [photos, setPhotos] = useState(eventData?.photos || []);
   const [description, setDescription] = useState(eventData?.description || '');
 
-  // User info states
+  // New state to track if the event originated from a sponsored template
+  const [isSponsoredTemplate, setIsSponsoredTemplate] = useState(false);
+
+  // State variables for the generic modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingField, setEditingField] = useState(null);
+  const [modalTitle, setModalTitle] = useState('');
+  const [tempModalValue, setTempModalValue] = useState('');
+  const [tempSelectedDate, setTempSelectedDate] = useState(new Date());
+
+  // State variables for host information (always fetched for the current user)
   const [hostFirstName, setHostFirstName] = useState('');
   const [hostLastName, setHostLastName] = useState('');
   const [hostProfileImage, setHostProfileImage] = useState(null);
 
-
+  // State for Pixabay image selection modal
   const [isPixabayModalVisible, setIsPixabayModalVisible] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // State for Preview Modal
+  const [isPreviewModalVisible, setIsPreviewModalVisible] = useState(false);
+
+  // State for Tags Modal
+  const [isTagsModalVisible, setIsTagsModalVisible] = useState(false);
 
   const auth = getAuth();
   const storage = getStorage();
 
-  const uploadImageToFirebase = async (uri, folder = 'liveEventPics') => {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const extension = uri.split('.').pop();
-    const filename = `${folder}/${Date.now()}.${extension}`;
-
-    const photoRef = ref(storage, filename);
-    const metadata = {
-      contentType: blob.type || 'image/jpeg',
-    };
-
-    await uploadBytes(photoRef, blob, metadata);
-    const downloadURL = await getDownloadURL(photoRef);
-    return downloadURL;
-  } catch (error) {
-    console.error('Image upload failed:', error);
-    throw error;
-  }
-};
-
-  const handleOpenLocation = () => {
-  // Example: Open Google Maps or just alert for now
-  if (location) {
-    const url = Platform.select({
-      ios: `maps:0,0?q=${location}`,
-      android: `geo:0,0?q=${location}`,
-    });
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Could not open map app.');
-    });
-  } else {
-    Alert.alert('No location specified');
-  }
-};
-
-const handlePickImage = async () => {
-  if (photos.length >= 3) {
-    Alert.alert("Limit", "Max 3 photos allowed.");
-    return;
-  }
-
-  const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!permissionResult.granted) {
-    Alert.alert("Permission Required", "Please allow access to your photos.");
-    return;
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    aspect: [4, 3],
-    quality: 0.75,
-  });
-
-  if (!result.canceled && result.assets?.[0]) {
+  const uploadImageToFirebase = useCallback(async (uri, folderPath) => {
     try {
-      // Resize and convert to WEBP
-      const manipulatedImage = await ImageManipulator.manipulateAsync(
-        result.assets[0].uri,
-        [{ resize: { width: 800 } }],
-        { compress: 0.6, format: ImageManipulator.SaveFormat.WEBP }
-      );
+      if (uri.startsWith('http://') || uri.startsWith('https://')) {
+        return uri;
+      }
 
-      const uploadedUrl = await uploadImageToFirebase(manipulatedImage.uri, 'liveEventPics');
-      setPhotos(prev => [...prev, uploadedUrl]);
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const filename = `${folderPath}/${Date.now()}.${Math.random().toString(36).substring(7)}.webp`;
+
+      const photoRef = ref(storage, filename);
+      const metadata = { contentType: 'image/webp' };
+
+      await uploadBytes(photoRef, blob, metadata);
+      const downloadURL = await getDownloadURL(photoRef);
+      return downloadURL;
     } catch (error) {
-      console.error('Image upload error:', error);
-      Alert.alert("Upload Failed", "Could not upload image. Please try again.");
+      console.error('Image upload failed:', error);
+      throw error;
     }
-  }
-};
+  }, [storage]);
+
+  const handlePickImage = useCallback(async () => {
+    if (photos.length >= 3) {
+      Alert.alert("Photo Limit", "You can only select a maximum of 3 photos per event.");
+      return;
+    }
+
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert("Permission Required", "Please allow access to your photos to select images.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    if (!result.canceled && result.assets?.[0]) {
+      try {
+        const manipulatedImage = await ImageManipulator.manipulateAsync(
+          result.assets[0].uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.85, format: ImageManipulator.SaveFormat.WEBP }
+        );
+        setPhotos(prev => [...prev, manipulatedImage.uri]);
+      } catch (error) {
+        console.error('Image manipulation error:', error);
+        Alert.alert("Image Processing Failed", "Could not process image. Please try again.");
+      }
+    }
+  }, [photos]);
+
+  const handleSelectPixabayImage = useCallback((imageUrl) => {
+    if (photos.length >= 3) {
+      Alert.alert("Photo Limit", "You can only select a maximum of 3 photos per event.");
+      return;
+    }
+    setPhotos(prev => [...prev, imageUrl]);
+    setIsPixabayModalVisible(false);
+  }, [photos]);
+
+
+  useEffect(() => {
+    if (isVisible) {
+      setTitle(eventData?.title || '');
+      let initialDate = new Date();
+      if (eventData?.date) {
+        if (eventData.date.seconds) {
+          initialDate = new Date(eventData.date.seconds * 1000);
+        } else if (eventData.date instanceof Date) {
+          initialDate = eventData.date;
+        }
+      }
+      setSelectedDate(initialDate);
+      setTempSelectedDate(initialDate);
+      setGroupSize(eventData?.groupSize?.toString() || '');
+      setLocation(eventData?.location || '');
+      setTags(eventData?.tags || []);
+      setPhotos(eventData?.photos || []);
+      setDescription(eventData?.description || '');
+      setIsSponsoredTemplate(mode === 'sponsored_template');
+    }
+  }, [isVisible, eventData, mode]);
+
 
   useEffect(() => {
     const fetchUserInfo = async () => {
@@ -119,13 +154,11 @@ const handlePickImage = async () => {
       if (!user) return;
 
       try {
-        // Assuming your user profile is stored in 'users/{uid}/ProfileInfo/userinfo'
         const profileDoc = await getDoc(doc(db, 'users', user.uid, 'ProfileInfo', 'userinfo'));
         if (profileDoc.exists()) {
           const data = profileDoc.data();
           setHostFirstName(data.displayFirstName || '');
           setHostLastName(data.displayLastName || '');
-          // set profile pic from first element of profileImages array if exists
           if (Array.isArray(data.profileImages) && data.profileImages.length > 0) {
             setHostProfileImage(data.profileImages[0]);
           }
@@ -136,462 +169,358 @@ const handlePickImage = async () => {
     };
 
     fetchUserInfo();
+  }, [auth]);
+
+
+  const handleDateOrTimeChange = useCallback((event, newPickedDate) => {
+    if (event.type === 'set' && newPickedDate) {
+      setTempSelectedDate(newPickedDate);
+    } else if (event.type === 'dismissed') {
+      setIsModalOpen(false);
+      setEditingField(null);
+      setModalTitle('');
+    }
   }, []);
 
-  // ... rest of your existing functions (handlePickImage, handleOpenLocation)...
+  const handleConfirmModal = useCallback(() => {
+    switch (editingField) {
+      case 'title':
+        setTitle(tempModalValue);
+        break;
+      case 'groupSize':
+        const parsedGroupSize = parseInt(tempModalValue);
+        if (!isNaN(parsedGroupSize) && parsedGroupSize > 0) {
+          setGroupSize(tempModalValue);
+        } else {
+          Alert.alert("Invalid Input", "Group Size must be a positive number.");
+          setGroupSize('');
+        }
+        break;
+      case 'location':
+        setLocation(tempModalValue);
+        break;
+      case 'description':
+        setDescription(tempModalValue);
+        break;
+      case 'date':
+      case 'time':
+        setSelectedDate(tempSelectedDate);
+        break;
+      default:
+        break;
+    }
+    setIsModalOpen(false);
+    setEditingField(null);
+    setModalTitle('');
+    setTempModalValue('');
+    setTempSelectedDate(selectedDate || new Date());
+  }, [editingField, tempModalValue, tempSelectedDate, selectedDate]);
 
-  const handleSubmit = async () => {
-  if (!title.trim() || !date.trim() || !location.trim() || !groupSize.trim()) {
-    Alert.alert("Missing Fields", "Please fill in all required fields: Title, Date, Location, Group Size.");
-    return;
-  }
+  const handleCancelModal = useCallback(() => {
+    setIsModalOpen(false);
+    setEditingField(null);
+    setModalTitle('');
+    setTempModalValue('');
+    setTempSelectedDate(selectedDate || new Date());
+  }, [selectedDate]);
 
-  if (isNaN(parseInt(groupSize)) || parseInt(groupSize) <= 0) {
-    Alert.alert("Invalid Group Size", "Group Size must be a positive number.");
-    return;
-  }
+  const formatDateForDisplay = (dateObj) => {
+    if (!dateObj) return '';
+    return dayjs(dateObj).format('MMMM D,YYYY');
+  };
 
-    try {
-    const user = auth.currentUser;
-    if (!user) {
-      Alert.alert("Authentication", "User not logged in.");
+  const formatTimeForDisplay = (dateObj) => {
+    if (!dateObj) return '';
+    return dayjs(dateObj).format('h:mm A');
+  };
+
+  const openEditModal = useCallback((fieldKey, currentFieldValue, title) => {
+    setEditingField(fieldKey);
+    setModalTitle(title);
+    if (fieldKey === 'date' || fieldKey === 'time') {
+      setTempSelectedDate(currentFieldValue || new Date());
+    } else {
+      setTempModalValue(currentFieldValue);
+    }
+    setIsModalOpen(true);
+  }, []);
+
+  const handleSaveTags = useCallback((newTags) => {
+    setTags(newTags);
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (photos.length < 3) {
+      Alert.alert("Missing Photos", "Please upload at least 3 photos for your event.");
       return;
     }
 
-    const photoUrls = [];
-
-    for (let photo of photos) {
-  if (photo.startsWith('http')) {
-    photoUrls.push(photo); // Already uploaded
-  } else {
-    try {
-      const uploadedUrl = await uploadImageToFirebase(photo);
-      photoUrls.push(uploadedUrl);
-    } catch (uploadError) {
-      console.error('Error uploading image:', uploadError);
-      throw uploadError;
+    if (!title.trim() || !location.trim() || !groupSize.trim() || !selectedDate) {
+      Alert.alert("Missing Information", "Please fill in all required fields: Event Title, Date, Location, and Group Size.");
+      return;
     }
+    if (isNaN(parseInt(groupSize)) || parseInt(groupSize) <= 0) {
+      Alert.alert("Invalid Group Size", "Group Size must be a positive number.");
+      return;
+    }
+
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert("Authentication Required", "You must be logged in to create an event.");
+        return;
+      }
+      const newDocRef = doc(collection(db, "live"));
+      const eventId = newDocRef.id;
+
+      const finalPhotoUrls = [];
+      for (let photoUri of photos) {
+        if (photoUri.startsWith('file://') || photoUri.startsWith('content://')) {
+          try {
+            const uploadedUrl = await uploadImageToFirebase(photoUri, `liveEventPics/${eventId}`);
+            finalPhotoUrls.push(uploadedUrl);
+          } catch (uploadError) {
+            console.error('Error uploading image during submission:', uploadError);
+            Alert.alert("Upload Failed", `Failed to upload image. Error: ${uploadError.message}`);
+            return;
+          }
+        } else {
+          finalPhotoUrls.push(photoUri);
+        }
+      }
+
+      const now = new Date();
+
+      await setDoc(newDocRef, {
+        Sponsor: "",
+        active: true,
+        attendeesCount: 1,
+        createdAt: now,
+        updatedAt: now,
+        date: selectedDate,
+        description: description.trim(),
+        full: false,
+        groupSize: parseInt(groupSize),
+        host: user.uid,
+        location: location.trim(),
+        photos: finalPhotoUrls,
+        sponsored: isSponsoredTemplate,
+        tags,
+        title: title.trim(),
+        uid: user.uid,
+      });
+
+      const hostAttendeeRef = doc(db, 'live', eventId, 'attendees', user.uid);
+      await setDoc(hostAttendeeRef, {
+        userId: user.uid,
+        joinedAt: now,
+        role: "host",
+      });
+      console.log(`Host ${user.uid} added to attendees for event ${eventId}`);
+
+      Alert.alert("Success!", "Your event has been created successfully!");
+      onClose(); // Close the modal
+    } catch (error) {
+      console.error("Error creating event:", error);
+      Alert.alert("Error", `Failed to create event: ${error.message || 'Please try again.'}`);
+    }
+  }, [title, location, groupSize, selectedDate, description, photos, tags, auth, uploadImageToFirebase, isSponsoredTemplate, onClose]);
+
+  const handleOpenLocation = useCallback(() => {
+    if (location) {
+      const url = Platform.select({
+        ios: `maps:0,0?q=${encodeURIComponent(location)}`,
+        android: `geo:0,0?q=${encodeURIComponent(location)}`,
+      });
+      if (url) {
+        Linking.openURL(url).catch(() => {
+          Alert.alert('Error', 'Could not open map app. Please ensure you have a map application installed.');
+        });
+      } else {
+        Alert.alert('Error', 'Unable to generate map URL for this platform.');
+      }
+    } else {
+      Alert.alert('No Location', 'Please enter a location first.');
+    }
+  }, [location]);
+
+  const handlePreview = useCallback(() => {
+    if (photos.length < 3) {
+      Alert.alert("Missing Photos", "Please upload at least 3 photos to preview your event.");
+      return;
+    }
+    setIsPreviewModalVisible(true);
+  }, [photos.length]);
+
+  // If the component is not visible, return null immediately to prevent rendering
+  if (!isVisible) {
+    return null;
   }
-}
 
-    const now = new Date();
-    const parsedDate = new Date(date); // Assumes `date` includes both date and time in string
-
-    const docRef = await addDoc(collection(db, "live"), {
-      Sponsor: "",
-      active: true,
-      attendeesCount: 1,
-      createdAt: now,
-      updatedAt: now,
-      date: parsedDate,
-      description: description.trim(),
-      full: false,
-      groupSize: parseInt(groupSize),
-      host: user.uid,
-      location: location.trim(),
-      photos: photoUrls,
-      sponsored: false,
-      tags,
-      title: title.trim()
-    });
-
-    // Optionally: show success and go back
-    Alert.alert("Success", "Event created successfully!");
-    navigation.goBack();
-
-  } catch (error) {
-  console.error("Full error:", error);
-  console.error("Error code:", error.code);
-  console.error("Error message:", error.message);
-  console.error("Server response:", error.customData?.serverResponse);
-  Alert.alert("Error", `Failed to create event: ${error.code}\n${error.message}`);
-}
-};
-
+  // Calculate modal content width, ensuring consistency with EventDetailsModal
+  const modalActualWidth = screenWidth - 40; // This means 20 units of margin on each side
 
   return (
-    <LinearGradient colors={["#D9043D", "#730220"]} style={styles.gradient}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Ionicons name="arrow-back" size={30} color="white" />
-      </TouchableOpacity>
+    <View style={styles.modalOverlayFull}>
+      <LinearGradient colors={["#D9043D", "#730220"]} style={[styles.modalContentContainer, { width: modalActualWidth }]}>
+        {/* The close button is MOVED from here to GallerySection */}
+        {/* <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+          <Ionicons name="close-circle" size={40} color="white" />
+        </TouchableOpacity> */}
 
-      {/* Image Gallery */}
-      <View style={styles.galleryContainer}>
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={(event) => {
-            const index = Math.floor(event.nativeEvent.contentOffset.x / width);
-            setCurrentImageIndex(index);
-          }}
-          scrollEventThrottle={16}
-        >
-          {photos.map((uri, index) => (
-            <View key={index} style={styles.imageWrapper}>
-              <Image source={{ uri }} style={styles.image} />
-              {/* X delete button */}
-              {currentImageIndex === index && (
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => {
-                    const newPhotos = [...photos];
-                    newPhotos.splice(index, 1);
-                    setPhotos(newPhotos);
-                    if (currentImageIndex >= newPhotos.length) {
-                      setCurrentImageIndex(newPhotos.length - 1);
-                    }
-                  }}
-                >
-                  <Ionicons name="close-circle" size={28} color="#fff" />
-                </TouchableOpacity>
-              )}
-            </View>
-          ))}
+        {/* ScrollView wraps all content to ensure it fits within the defined maxHeight */}
+        <ScrollView contentContainerStyle={styles.scrollViewContent}>
+          <GallerySection
+            photos={photos}
+            setPhotos={setPhotos}
+            currentImageIndex={currentImageIndex}
+            setCurrentImageIndex={setCurrentImageIndex}
+            handlePickImage={handlePickImage}
+            setIsPixabayModalVisible={setIsPixabayModalVisible}
+            screenWidth={modalActualWidth}
+            onCloseGallery={onClose}
+          />
+
+          <FieldsSection
+            title={title}
+            selectedDate={selectedDate}
+            groupSize={groupSize}
+            location={location}
+            description={description}
+            tags={tags}
+            openEditModal={openEditModal}
+            formatDateForDisplay={formatDateForDisplay}
+            formatTimeForDisplay={formatTimeForDisplay}
+            handleOpenLocation={handleOpenLocation}
+            onOpenTagsModal={() => setIsTagsModalVisible(true)}
+          />
+
+          <HostInfo
+            hostFirstName={hostFirstName}
+            hostLastName={hostLastName}
+            hostProfileImage={hostProfileImage}
+          />
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={[styles.button, styles.previewButton]}
+              onPress={handlePreview}
+            >
+              <Text style={styles.buttonText}>Preview</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.button, styles.createButton]}
+              onPress={handleSubmit}
+            >
+              <Text style={styles.buttonText}>Create Event</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
 
-        {/* Pagination dots */}
-        <View style={styles.paginationDotsContainer}>
-          {photos.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.indicator, currentImageIndex === i && styles.activeIndicator]}
-            />
-          ))}
-        </View>
-      </View>
-
-      {/* Thumbnails + Upload + Pixabay row with dark red background */}
-      <View style={styles.thumbnailAndButtonsRow}>
-  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailsScroll}>
-    {photos.map((uri, index) => (
-      <View key={index} style={styles.thumbnailWrapper}>
-        <Image source={{ uri }} style={styles.thumbnail} />
-        
-        {/* Move Left */}
-        {index > 0 && (
-          <TouchableOpacity
-            style={[styles.arrowButton, styles.leftArrow]}
-            onPress={() => {
-              const newPhotos = [...photos];
-              [newPhotos[index - 1], newPhotos[index]] = [newPhotos[index], newPhotos[index - 1]];
-              setPhotos(newPhotos);
-              setCurrentImageIndex(index - 1);
-            }}
-          >
-            <Ionicons name="arrow-back-circle" size={18} color="#fff" />
-          </TouchableOpacity>
+        {isModalOpen && (
+          <GenericEditModal
+            visible={isModalOpen}
+            onClose={handleCancelModal}
+            modalTitle={modalTitle}
+            editingField={editingField}
+            tempModalValue={tempModalValue}
+            setTempModalValue={setTempModalValue}
+            tempSelectedDate={tempSelectedDate}
+            handleDateOrTimeChange={handleDateOrTimeChange}
+            handleConfirmModal={handleConfirmModal}
+            handleCancelModal={handleCancelModal}
+          />
         )}
 
-        {/* Move Right */}
-        {index < photos.length - 1 && (
-          <TouchableOpacity
-            style={[styles.arrowButton, styles.rightArrow]}
-            onPress={() => {
-              const newPhotos = [...photos];
-              [newPhotos[index], newPhotos[index + 1]] = [newPhotos[index + 1], newPhotos[index]];
-              setPhotos(newPhotos);
-              setCurrentImageIndex(index + 1);
-            }}
-          >
-            <Ionicons name="arrow-forward-circle" size={18} color="#fff" />
-          </TouchableOpacity>
-        )}
-
-        {/* Select Thumbnail */}
-        <TouchableOpacity
-          onPress={() => setCurrentImageIndex(index)}
-          style={[
-            styles.thumbnailTouchable,
-            currentImageIndex === index && styles.activeThumbnailBorder,
-            { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-          ]}
+        <PixabayModal
+          visible={isPixabayModalVisible}
+          onClose={() => setIsPixabayModalVisible(false)}
+          onSelect={handleSelectPixabayImage}
         />
-      </View>
-    ))}
-  </ScrollView>
 
-  {/* Upload + Pixabay Buttons */}
-  <View style={styles.iconButtonsRow}>
-    <TouchableOpacity style={styles.iconButton} onPress={handlePickImage}>
-      <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
-      <Text style={styles.iconButtonText}>Upload</Text>
-    </TouchableOpacity>
+        <PreviewModal
+          isVisible={isPreviewModalVisible}
+          onClose={() => setIsPreviewModalVisible(false)}
+          eventDetails={{
+            title,
+            selectedDate,
+            groupSize,
+            location,
+            description,
+            photos,
+            tags,
+            currentImageIndex
+          }}
+          hostInfo={{
+            hostFirstName,
+            hostLastName,
+            hostProfileImage
+          }}
+        />
 
-    <TouchableOpacity
-      style={styles.iconButton}
-      onPress={() => {
-        if (photos.length >= 3) return Alert.alert("Limit", "Max 3 photos allowed.");
-        setIsPixabayModalVisible(true);
-      }}
-    >
-      <Ionicons name="images-outline" size={28} color="#fff" />
-      <Text style={styles.iconButtonText}>Pixabay</Text>
-    </TouchableOpacity>
-  </View>
-</View>
-
-      {/* Fields */}
-      {renderField("Title", title, setTitle, isEditing)}
-      {renderField("Date", date, setDate, isEditing)}
-      {renderField("Time", time, setTime, isEditing)}
-      {renderField("Group Size", groupSize, setGroupSize, isEditing, "numeric")}
-      {renderField("Location", location, setLocation, isEditing, "default", true, handleOpenLocation)}
-      {renderField("Description", description, setDescription, isEditing, "default")}
-
-      {/* Host info row */}
-      <View style={styles.hostRow}>
-        {hostProfileImage ? (
-          <Image source={{ uri: hostProfileImage }} style={styles.hostImage} />
-        ) : (
-          <View style={[styles.hostImage, styles.hostImagePlaceholder]} />
-        )}
-        <View style={styles.hostInfo}>
-          <Text style={styles.hostLabel}>Host</Text>
-          <Text style={styles.hostName}>{hostFirstName} {hostLastName}</Text>
-        </View>
-      </View>
-
-      {/* Buttons */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: isEditing ? "#5B0A1F" : "#F2BB47" }]}
-          onPress={() => setIsEditing(prev => !prev)}
-        >
-          <Text style={styles.buttonText}>{isEditing ? "Done Editing" : "Edit Meetup"}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: "#0367A6" }]}
-          onPress={handleSubmit}
-        >
-          <Text style={styles.buttonText}>Create</Text>
-        </TouchableOpacity>
-      </View>
-
-      <PixabayModal
-        visible={isPixabayModalVisible}
-        onClose={() => setIsPixabayModalVisible(false)}
-        onSelect={(url) => {
-          setPhotos(prev => [...prev, url]);
-          setIsPixabayModalVisible(false);
-        }}
-      />
-    </LinearGradient>
+        <TagSelectionModal
+          isVisible={isTagsModalVisible}
+          onClose={() => setIsTagsModalVisible(false)}
+          selectedTags={tags}
+          onSaveTags={handleSaveTags}
+        />
+      </LinearGradient>
+    </View>
   );
 };
 
-const renderField = (
-  label,
-  value,
-  setter,
-  editable,
-  keyboardType = 'default',
-  isLocation = false,
-  onPressLocation
-) => (
-  <View style={styles.infoRow}>
-    <Ionicons
-      name={
-        label === "Title" ? "chatbubble-ellipses-outline" :
-        label === "Date" ? "calendar-outline" :
-        label === "Time" ? "time-outline" :
-        label === "Group Size" ? "people-outline" :
-        label === "Location" ? "location-outline" : "information-circle-outline"
-      }
-      size={20}
-      color="#fff"
-      style={styles.icon}
-    />
-    <Text style={styles.label}>{label}:</Text>
-    {editable ? (
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-        <TextInput
-          value={value}
-          onChangeText={setter}
-          keyboardType={keyboardType}
-          style={[styles.input, { flex: 1, color: '#fff' }]}
-          placeholder={`Enter ${label.toLowerCase()}`}
-          placeholderTextColor="#aaa"
-        />
-        {isLocation && (
-          <TouchableOpacity onPress={onPressLocation} style={{ marginLeft: 10 }}>
-            <Ionicons name="map-outline" size={20} color="#F2BB47" />
-          </TouchableOpacity>
-        )}
-      </View>
-    ) : (
-      <Text style={styles.value}>{value || "N/A"}</Text>
-    )}
-  </View>
-);
-
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  backButton: {
+  modalOverlayFull: {
     position: 'absolute',
-    top: 40,
-    left: 20,
-    zIndex: 10,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-    marginRight: 15,
-  },
-  icon: { marginRight: 8 },
-  label: { color: '#fff', fontWeight: 'bold', width: 100 },
-  value: { color: '#fff', flex: 1 },
-  input: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#fff',
-    paddingVertical: 2,
-    fontSize: 16,
-    color: '#fff',
-  },
-  hostRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 20,
-    marginTop: 20,
-    marginBottom: 30,
-  },
-  hostImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#ccc',
-  },
-  hostImagePlaceholder: {
-    backgroundColor: '#555',
-  },
-  hostInfo: {
-    marginLeft: 12,
-  },
-  hostLabel: {
-    color: '#F2BB47',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  hostName: {
-    color: '#fff',
-    fontSize: 16,
-  },
-  galleryContainer: {
-    width,
-    height: 300,
-    position: 'relative',
-  },
-  imageWrapper: {
-    width,
-    height: 300,
-    position: 'relative',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-    borderRadius: 10,
-  },
-  removeButton: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 2,
-    zIndex: 10,
-  },
-  paginationDotsContainer: {
-    position: 'absolute',
-    bottom: 10,
+    top: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
-    zIndex: 10,
-  },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
-    backgroundColor: '#666',
-  },
-  activeIndicator: {
-    backgroundColor: '#F2BB47',
-  },
-  bottomRow: {
-    flexDirection: 'column',
-  },
- thumbnailAndButtonsRow: {
-    flexDirection: 'row',
-    backgroundColor: '#730220', // dark red background
-    paddingVertical: 8,
-    paddingHorizontal: 10,
     alignItems: 'center',
   },
-  thumbnailsScroll: {
-    flexGrow: 0,
-    flex: 1,
+  modalContentContainer: {
+    maxHeight: screenHeight * 0.9,
+    borderRadius: 20,
+    overflow: 'hidden',
+    paddingTop: 10,
+    paddingBottom: 20,
+    marginHorizontal: 20,
   },
-  thumbnailTouchable: {
-    marginHorizontal: 4,
-    borderRadius: 8,
+  scrollViewContent: {
+    paddingBottom: 40,
+    // Removed paddingTop: 60 as the close button is no longer here
+    paddingTop: 10, // Adjust as needed to give space above the gallery or first content element
   },
-  activeThumbnailBorder: {
-    borderWidth: 2,
-    borderColor: '#F2BB47',
-  },
-  thumbnailWrapper: {
-  position: 'relative',
-  marginHorizontal: 4,
-},
-  thumbnail: {
-  width: 50,
-  height: 50,
-  borderRadius: 8,
-  resizeMode: 'cover',
-  backgroundColor: '#000', // optional fallback
-},
-  arrowButton: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: -10,
-    backgroundColor: '#0006',
-    borderRadius: 12,
-    padding: 2,
-  },
-  leftArrow: {
-    left: 2,
-  },
-  rightArrow: {
-    right: 2,
-  },
-   iconButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
-  iconButton: {
-    alignItems: 'center',
-    marginHorizontal: 8,
-  },
-  iconButtonText: {
-    color: '#fff',
-    fontSize: 12,
-  },
+  // The closeButton style is no longer needed here, as it's moved to GallerySection.js
+  // closeButton: {
+  //   position: 'absolute',
+  //   top: 20,
+  //   right: 20,
+  //   zIndex: 10,
+  // },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginHorizontal: 20,
     marginBottom: 30,
+    marginTop: 20,
   },
   button: {
     paddingVertical: 14,
-    paddingHorizontal: 40,
+    paddingHorizontal: 25,
     borderRadius: 30,
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  previewButton: {
+    backgroundColor: "#F2BB47",
+  },
+  createButton: {
+    backgroundColor: "#0367A6",
   },
   buttonText: {
     fontWeight: 'bold',

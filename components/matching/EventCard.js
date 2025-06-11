@@ -1,121 +1,136 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, Dimensions, TouchableWithoutFeedback, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableWithoutFeedback, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { Linking } from 'react-native';
 
-
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('screen');
 
 const EventCard = ({ event, isSwiping }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const dotCount = event.photos.length;
-  const dotWidth = (width - dotCount * 8) / dotCount; // 8px total spacing per dot (4px margin each side)
-
-  const profilePics = [
-  'https://randomuser.me/api/portraits/women/68.jpg',
-  'https://randomuser.me/api/portraits/men/34.jpg',
-  'https://randomuser.me/api/portraits/women/44.jpg',
-  'https://randomuser.me/api/portraits/men/22.jpg',
-  'https://randomuser.me/api/portraits/women/12.jpg',
-  'https://randomuser.me/api/portraits/men/77.jpg',
-];
-
+  const dotWidth = (width - dotCount * 8) / dotCount;
 
   const handleTap = (e) => {
-    if (isSwiping) return; // disable tap if swiping
+    if (isSwiping) return;
 
     const tapX = e.nativeEvent.locationX;
     const leftBoundary = width * 0.2;
     const rightBoundary = width * 0.8;
 
     if (tapX <= leftBoundary) {
-      // Tap in left 20%
       setCurrentIndex((prev) => (prev > 0 ? prev - 1 : prev));
     } else if (tapX >= rightBoundary) {
-      // Tap in right 20%
       setCurrentIndex((prev) =>
         prev < event.photos.length - 1 ? prev + 1 : prev
       );
     }
-    // Ignore taps in the middle 60%
   };
 
   const currentImage = event.photos?.[currentIndex];
-  const isFirstSlide = currentIndex === 0;
   const attendeeImages = event.attendees?.map(att => att.profileImages?.[0]).filter(Boolean) || [];
 
+  // Determine status bar height for Android. For iOS, StatusBar.currentHeight is null.
+  const androidStatusBarHeight = Platform.OS === 'android' ? StatusBar.currentHeight : 0;
+
+  // Calculate the padding top for the infoOverlay content to push it below the status bar/notch
+  const infoOverlayContentPaddingTop = Platform.select({
+    android: androidStatusBarHeight + 10,
+    ios: 50 + 10,
+    default: 30
+  });
+
+  // Calculate the top position for other overlays (host, attendees, tags)
+  const otherOverlayTopPosition = Platform.select({
+    android: androidStatusBarHeight + 144,
+    ios: 184,
+    default: 210
+  });
+
+  const paginationTopPosition = Platform.select({
+    android: androidStatusBarHeight + 124,
+    ios: 164,
+    default: 180
+  });
 
   return (
-      <View style={styles.container}>
-        <TouchableWithoutFeedback onPress={isSwiping ? null : handleTap}>
+    <View style={styles.container}>
+      <TouchableWithoutFeedback onPress={isSwiping ? null : handleTap}>
         <Image
           source={{ uri: currentImage }}
           style={styles.image}
-          resizeMode="cover"
+          contentFit="cover"
         />
-        </TouchableWithoutFeedback>
-        <LinearGradient
-          colors={['#D9043D80', '#0367A680']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[styles.infoOverlay, styles.top]}
-        >
-          {/* Top Row */}
-          <View style={styles.topRow}>
+      </TouchableWithoutFeedback>
+
+      <LinearGradient
+        colors={['#D9043D', '#0367A6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={[
+          styles.infoOverlay,
+          { top: 0 },
+          { paddingTop: infoOverlayContentPaddingTop },
+          { borderRadius: styles.container.borderRadius },
+        ]}
+      >
+        {/* Top Row */}
+        <View style={styles.topRow}>
           <Text style={styles.title}>{event.title}</Text>
           {event.description && (
             <Text style={styles.description}>{event.description}</Text>
           )}
         </View>
 
-          {/* Bottom Row */}
-          <View style={styles.bottomRow}>
-            {/* Location */}
+        {/* Bottom Row */}
+        {/* Changed justifyContent to 'space-between' and adjusted padding */}
+        <View style={styles.bottomRow}>
+          {/* Location */}
           <View style={styles.locationContainer}>
             <TouchableOpacity
-            style={styles.locationWrapper}
+              style={styles.locationWrapper}
               onPress={() => {
                 const query = encodeURIComponent(event.location);
-                const url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+                // Corrected Google Maps URL for direct search
+                const url = `https://www.google.com/maps/search/?api=1&query=$${query}`; // Corrected template literal
                 Linking.openURL(url);
               }}
             >
-              <Feather name="map-pin" size={24} color="white"/>
+              <Feather name="map-pin" size={24} color="white" />
             </TouchableOpacity>
             <Text style={styles.locationText}>{event.location}</Text>
           </View>
 
-
-
-            {/* Date */}
-            <View style={styles.dateContainer}>
-              <Feather name="calendar" size={24} color="white" />
-              <View style={{ marginLeft: 6 }}>
-                <Text style={styles.dateText}>
-                  {event.date?.seconds
-                    ? new Date(event.date.seconds * 1000).toLocaleDateString()
-                    : ''}
-                </Text>
-                <Text style={styles.timeText}>
-                  {event.date?.seconds
-                    ? new Date(event.date.seconds * 1000).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : ''}
-                </Text>
-              </View>
+          {/* Date */}
+          <View style={styles.dateContainer}>
+            <Feather name="calendar" size={24} color="white" />
+            <View style={{ marginLeft: 6 }}>
+              <Text style={styles.dateText}>
+                {event.date?.seconds
+                  ? new Date(event.date.seconds * 1000).toLocaleDateString()
+                  : ''}
+              </Text>
+              <Text style={styles.timeText}>
+                {event.date?.seconds
+                  ? new Date(event.date.seconds * 1000).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  : ''}
+              </Text>
             </View>
-
           </View>
-        </LinearGradient>
+        </View>
+      </LinearGradient>
 
-        {currentIndex === 0 ? (
-        <View style={styles.hostOverlay}>
+      {/* Other Overlays: Host, Attendees, Tags */}
+      {currentIndex === 0 ? (
+        <View style={[styles.hostOverlay, { top: otherOverlayTopPosition }]}>
           <Image
             source={{ uri: event.hostInfo?.profileImages?.[0] || 'https://via.placeholder.com/150' }}
             style={styles.hostCircle}
+            resizeMode="cover"
           />
           <View style={styles.hostInfo}>
             <Text style={styles.hostedBy}>Hosted by:</Text>
@@ -123,32 +138,30 @@ const EventCard = ({ event, isSwiping }) => {
           </View>
         </View>
       ) : currentIndex === 2 ? (
-        <View style={styles.tagsOverlay}>
-        <View style={styles.tagsContainer}>
-          {(event.tags || []).map((tag, i) => (
-            <View key={i} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
-            </View>
-          ))}
+        <View style={[styles.tagsOverlay, { top: otherOverlayTopPosition }]}>
+          <View style={styles.tagsContainer}>
+            {(event.tags || []).map((tag, i) => (
+              <View key={i} style={styles.tag}>
+                <Text style={styles.tagText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </View>
-
       ) : (
-        <View style={styles.attendeesOverlay}>
+        <View style={[styles.attendeesOverlay, { top: otherOverlayTopPosition }]}>
           <View style={styles.attendeeCircles}>
-            {attendeeImages.map((uri, index) => (
+            {attendeeImages.slice(0, 5).map((uri, index) => (
               <Image
                 key={index}
                 source={{ uri }}
                 style={[
                   styles.attendeeCircle,
                   {
-                    width: 46 + ((attendeeImages.length - 1) * 23),
-                    zIndex: 6 - index,
-                    borderWidth: 2,
-                    borderColor: '#0367A6',
+                    left: index * 26,
+                    zIndex: 5 - index,
                   },
                 ]}
+                resizeMode="cover"
               />
             ))}
           </View>
@@ -159,27 +172,22 @@ const EventCard = ({ event, isSwiping }) => {
         </View>
       )}
 
-
-        <View style={styles.pagination}>
-          {event.photos.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dot,
-                {
-                  width: dotWidth,
-                  backgroundColor: currentIndex === index ? '#D9043D' : '#D9043D40',
-                },
-              ]}
-            />
-          ))}
-        </View>
-        <View style={styles.counter}>
-          <Text style={styles.counterText}>
-            {currentIndex + 1}/{event.photos.length}
-          </Text>
-        </View>
+      {/* Moved pagination here and adjusted its top position */}
+      <View style={[styles.pagination, { top: paginationTopPosition }]}>
+        {event.photos.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.dot,
+              {
+                width: dotWidth,
+                backgroundColor: currentIndex === index ? '#D9043D' : '#D9043D40',
+              },
+            ]}
+          />
+        ))}
       </View>
+    </View>
   );
 };
 
@@ -188,38 +196,28 @@ const styles = StyleSheet.create({
     width,
     height,
     position: 'relative',
+    borderRadius: 0,
+    overflow: 'hidden',
   },
   image: {
     width: '100%',
     height: '100%',
   },
   infoOverlay: {
-  position: 'absolute',
-  left: 0,
-  right: 0,
-  backgroundColor: '#D9043D80',
-  paddingLeft: 0, // Adds inner padding
-  paddingRight: 0, // Adds inner padding
-  paddingTop: 60,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingLeft: 0, // Keep these at 0, as bottomRow will handle padding
+    paddingRight: 0, // Keep these at 0, as bottomRow will handle padding
     paddingBottom: 14,
-  borderRadius: 0,
-  zIndex: 10,
-  alignItems: 'center', // Center horizontally
+    zIndex: 10,
+    alignItems: 'center',
 
-  // (iOS)
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 4,
-  },
-  shadowOpacity: 1,
-  shadowRadius: 4.65,
-
-  // (Android)
-  elevation: 8,
-},
-  top: {
-    top: 36,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 4.65,
+    elevation: 8,
   },
   bottom: {
     bottom: 40,
@@ -237,237 +235,191 @@ const styles = StyleSheet.create({
   },
   counter: {
     position: 'absolute',
-    top: 10,
     right: 16,
+    zIndex: 100,
   },
   counterText: {
     color: 'white',
     fontSize: 14,
   },
   topRow: {
-  flexDirection: 'column', // <-- change from 'row' to 'column'
-  alignItems: 'flex-start',
-  marginBottom: 4,
-  paddingHorizontal: 20,
-  width: '100%',
-},
-
-description: {
-  fontSize: 12,
-  color: '#ccc',
-  marginTop: 0,
-  marginBottom: 2,
-  maxWidth: '100%',
-  fontStyle: 'italic',
-},
-
-
-bottomRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  paddingHorizontal: 20,
-  alignItems: 'center',
-  gap: 24, // Only works if you're using React Native 0.71+
-},
-
-dateContainer: {
-  flexDirection: 'row',
-  alignItems: 'flex-start',
-},
-
-dateText: {
-  color: 'white',
-  fontSize: 14,
-  fontWeight: '600',
-},
-
-timeText: {
-  color: '#ddd',
-  fontSize: 12,
-},
-
-locationText: {
-  color: 'white',
-  fontSize: 14,
-  marginLeft: 6,
-  flexWrap: 'wrap',   // Enable wrapping
-  alignSelf: 'flex-start',
-  flexShrink: 1,
-},
-
-locationWrapper: {
-  backgroundColor: '#0367A6',
-  borderRadius: 10,
-  paddingHorizontal: 4,
-  paddingVertical: 4,
-},
-
-locationContainer: {
-  flexDirection: 'row',
-  flexShrink: 1,
-},
-
-hostOverlay: {
-  position: 'absolute',
-  top: 210,
-  right: 0,
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#0367A6',
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  borderTopLeftRadius: 16,
-  borderBottomLeftRadius: 16,
-
-  // (iOS)
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 4,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+    paddingHorizontal: 20, // Keep padding here for title/description
+    width: '100%',
   },
-  shadowOpacity: 1,
-  shadowRadius: 4.65,
-
-  // (Android)
-  elevation: 8,
-},
-
-hostCircle: {
-  width: 46,
-  height: 46,
-  borderRadius: 30,
-  backgroundColor: '#fff',
-  marginRight: 8,
-},
-
-hostInfo: {
-  flexDirection: 'column',
-},
-
-hostedBy: {
-  fontSize: 12,
-  fontStyle: 'italic',
-  color: '#ccc',
-},
-
-hostName: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: 'white',
-},
-
-attendeesOverlay: {
-  position: 'absolute',
-  top: 210,
-  right: 0,
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: '#0367A6',
-  paddingHorizontal: 12,
-  paddingVertical: 8,
-  borderTopLeftRadius: 16,
-  borderBottomLeftRadius: 16,
-  alignItems: 'center', // allows content-size shrinkage
-
-  // (iOS)
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 4,
+  description: {
+    fontSize: 12,
+    color: '#ccc',
+    marginTop: 0,
+    marginBottom: 2,
+    maxWidth: '100%',
+    fontStyle: 'italic',
   },
-  shadowOpacity: 1,
-  shadowRadius: 4.65,
-
-  // (Android)
-  elevation: 8,
-},
-
-attendeeCircles: {
-  position: 'relative',
-  height: 46,
-  flexDirection: 'row',
-  marginRight: 54,
-},
-
-attendeeCircle: {
-  width: 46,
-  height: 46,
-  borderRadius: 23,
-  backgroundColor: '#fff',
-  position: 'absolute',
-  top: 0,
-},
-
-pagination: {
-  position: 'absolute',
-  bottom: 46,
-  left: 0,
-  right: 0,
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-dot: {
-  height: 5,
-  borderRadius: 3,
-  marginHorizontal: 4,
-},
-
-activeDot: {
-  width: 80,
-  backgroundColor: '#D9043D',
-},
-
-inactiveDot: {
-  width: 80,
-  backgroundColor: '#D9043D',
-},
-
-tagsOverlay: {
-  position: 'absolute',
-  top: 210,
-  right: 0,
-  padding: 12,
-  backgroundColor: 'transparent', // Changed from '#0367A6' to transparent
-  borderTopLeftRadius: 20,
-  borderBottomLeftRadius: 20,
-  flexDirection: 'row',
-
-    // (iOS)
-  shadowColor: '#000',
-  shadowOffset: {
-    width: 0,
-    height: 4,
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between', // Keeps elements at far ends
+    width: '100%', // Ensure it takes full width to apply space-between effectively
+    paddingHorizontal: 20, // Add padding here to create space from the sides
+    alignItems: 'center',
+    // Removed gap: 24 as space-between will handle spacing
   },
-  shadowOpacity: 1,
-  shadowRadius: 4.65,
-
-  // (Android)
-  elevation: 8,
-},
-
-tagsContainer: {
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  gap: 2,
-},
-
-tag: {
-  backgroundColor: '#0367A6', // Changed from '#D9043D' (red) to '#0367A6' (blue)
-  paddingHorizontal: 10,
-  paddingVertical: 10,
-  borderRadius: 12,
-  marginLeft: 4,
-  marginBottom: 2,
-},
-
-tagText: {
-  color: 'white',
-  fontSize: 14,
-  fontWeight: 'bold'
-},
-
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  dateText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  timeText: {
+    color: '#ddd',
+    fontSize: 12,
+  },
+  locationText: {
+    color: 'white',
+    fontSize: 14,
+    marginLeft: 6,
+    flexWrap: 'wrap',
+    alignSelf: 'flex-start',
+    flexShrink: 1,
+  },
+  locationWrapper: {
+    backgroundColor: '#0367A6',
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    flexShrink: 1,
+  },
+  hostOverlay: {
+    position: 'absolute',
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0367A6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  hostCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 30,
+    backgroundColor: '#fff',
+    marginRight: 8,
+  },
+  hostInfo: {
+    flexDirection: 'column',
+  },
+  hostedBy: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: '#ccc',
+  },
+  hostName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+  },
+  attendeesOverlay: {
+    position: 'absolute',
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0367A6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  attendeeCircles: {
+    position: 'relative',
+    height: 46,
+    width: 100,
+    marginRight: 24,
+    flexDirection: 'row',
+  },
+  attendeeCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#fff',
+    position: 'absolute',
+    top: 0,
+    borderWidth: 2,
+    borderColor: '#0367A6',
+  },
+  pagination: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  dot: {
+    height: 5,
+    borderRadius: 3,
+    marginHorizontal: 4,
+  },
+  activeDot: {
+    width: 80,
+    backgroundColor: '#D9043D',
+  },
+  inactiveDot: {
+    width: 80,
+    backgroundColor: '#D9043D',
+  },
+  tagsOverlay: {
+    position: 'absolute',
+    right: 0,
+    padding: 12,
+    backgroundColor: 'transparent',
+    borderTopLeftRadius: 20,
+    borderBottomLeftRadius: 20,
+    flexDirection: 'row',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 2,
+  },
+  tag: {
+    backgroundColor: '#0367A6',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginLeft: 4,
+    marginBottom: 2,
+  },
+  tagText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold'
+  },
 });
 
 export default EventCard;

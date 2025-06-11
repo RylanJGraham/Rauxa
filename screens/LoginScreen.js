@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { 
-    View, 
-    Text, 
-    TextInput, 
-    TouchableOpacity, 
-    Image, 
-    ScrollView, 
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Image,
+    ScrollView,
     SafeAreaView,
     StyleSheet,
-    Button,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
@@ -18,7 +17,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 
 const LoginScreen = () => {
     const navigation = useNavigation();
-    
+
     // State for user input
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -45,7 +44,7 @@ const LoginScreen = () => {
                 <ScrollView contentContainerStyle={styles.scrollContent}>
                     <View style={styles.logoContainer}>
                         <Image
-                            source={require('../assets/login/Login_Logo.png')}
+                            source={require('../assets/onboarding/Onboarding1.png')}
                             style={styles.logo}
                             resizeMode="contain"
                         />
@@ -87,15 +86,16 @@ const LoginScreen = () => {
                         <Text style={[styles.helpText]}>Forgot Your Password?</Text>
 
                         {/* Login Button */}
-                        <TouchableOpacity style={styles.signUpButton} onPress={handleLogin}>
-                            <Text style={styles.signUpButtonText}>Login</Text>
+                        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+                            <Text style={styles.loginButtonText}>Login</Text>
                         </TouchableOpacity>
 
                         {/* Signup Navigation */}
                         <View style={styles.bottomTextContainer}>
                             <Text style={styles.bottomText}>Don't Have an Account? </Text>
-                            <TouchableOpacity>
-                                <Button title="Create" onPress={() => navigation.navigate("SignUp")} />
+                            {/* Unified "Create" button for both platforms */}
+                            <TouchableOpacity onPress={() => navigation.navigate("SignUp")}>
+                                <Text style={styles.createAccountText}>Create</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -115,12 +115,13 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        alignItems: 'center',
-        paddingVertical: 48,
+        alignItems: 'center', // Centers content horizontally
+        paddingTop: 80, // Increased top padding to push content down
+        paddingBottom: 48, // Keeping some bottom padding, adjust as needed
         paddingHorizontal: 16,
     },
     logoContainer: {
-        width: 64,
+        width: 200,
         height: 64,
         marginBottom: 32,
     },
@@ -152,6 +153,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#F2BB47',
         fontSize: 16,
+        color: 'white',
     },
     inputIcon: {
         position: 'absolute',
@@ -159,13 +161,13 @@ const styles = StyleSheet.create({
         top: 14,
         zIndex: 1,
     },
-    signUpButton: {
+    loginButton: {
         backgroundColor: '#D9043D',
         borderRadius: 24,
         paddingVertical: 8,
         marginTop: 8,
     },
-    signUpButtonText: {
+    loginButtonText: {
         color: 'white',
         textAlign: 'center',
         fontSize: 24,
@@ -191,7 +193,13 @@ const styles = StyleSheet.create({
         color: 'red',
         textAlign: 'center',
         marginVertical: 8,
-    }
+    },
+    createAccountText: {
+        color: '#2196F3',
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 4,
+    },
 });
 
 export default LoginScreen;

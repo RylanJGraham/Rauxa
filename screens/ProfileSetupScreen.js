@@ -384,10 +384,10 @@ const completeProfileSetup = useCallback(async () => {
             id: "1",
             component: (
                 <View style={styles.slide}>
-                    <Text style={styles.title}>Let's get the Party Started</Text>
-                    <Text style={styles.subtitle}>Let us get to know you, your interests, and set up your public profile.</Text>
+                    <Text style={styles.titleRight}>Let's get it Started!</Text>
+                    <Text style={styles.subtitleRight}>Let us get to know you, your interests, and set up your public profile.</Text>
                     <Image
-                        source={require("../assets/profilesetup/setup1.png")}
+                        source={require("../assets/profilesetup/setupImage.png")}
                         style={styles.image}
                         resizeMode="contain"
                     />
@@ -608,9 +608,19 @@ const styles = StyleSheet.create({
         fontSize: 36,
         fontWeight: "bold",
         color: "#fff",
-        textAlign: "left",
+        textAlign: "left", // This was the original, for reference
         paddingHorizontal: 30,
         marginTop: 5,
+    },
+    // New style for right-aligned title
+    titleRight: {
+        fontSize: 36,
+        fontWeight: "bold",
+        color: "#fff",
+        textAlign: "Left", // Changed to right
+        paddingHorizontal: 30,
+        marginTop: 5,
+        width: "100%", // Ensure it takes full width to align text within
     },
     prompt: {
         fontSize: 24,
@@ -625,9 +635,18 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: 14,
         color: "#F2F2F2",
-        textAlign: "center",
-        marginBottom: 0,
+        textAlign: "center", // This was the original, for reference
+        marginBottom: 10,
         paddingHorizontal: 20,
+    },
+    // New style for right-aligned subtitle
+    subtitleRight: {
+        fontSize: 14,
+        color: "#F2F2F2",
+        textAlign: "Left", // Changed to right
+        marginBottom: 10,
+        paddingHorizontal: 30, // Adjust padding as needed for alignment
+        width: "100%", // Ensure it takes full width to align text within
     },
     input: {
         width: "80%",
@@ -725,6 +744,7 @@ const styles = StyleSheet.create({
     image: {
         width: width,
         height: height * 0.4,
+        marginTop: 10,
     },
 });
 

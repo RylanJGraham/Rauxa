@@ -11,7 +11,7 @@ import {
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { Alert, Text } from 'react-native';
-import { makeRedirectUri } from 'expo-auth-session'; // Ensure this is imported
+import { makeRedirectUri } from 'expo-auth-session';
 
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
@@ -75,8 +75,6 @@ export const AuthProvider = ({ children }) => {
         }
     );
 
-    // ... (rest of your useEffect, signUpWithEmail, signInWithEmail, signOutUser, signInWithGoogle, signInWithGithub functions, and return statement) ...
-    // The rest of the file remains unchanged as you provided it after the reordering fix.
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             setUser(firebaseUser);
@@ -87,34 +85,24 @@ export const AuthProvider = ({ children }) => {
                 const userDocSnap = await getDoc(userDocRef);
 
                 if (!userDocSnap.exists()) {
+                    // Removed the entire block for generating unique usernames
+                    // and creating the 'usernames' collection document.
+
+                    // If you still want to set an initial username in the user's document,
+                    // but without the uniqueness check or separate collection, you can do it here.
                     let username = firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : `user-${firebaseUser.uid.substring(0, 8)}`);
                     if (username.length > 20) {
                         username = username.substring(0, 20);
                     }
 
-                    let finalUsername = username;
-                    let suffix = 0;
-                    while (true) {
-                        const checkUsernameRef = doc(db, 'usernames', finalUsername);
-                        const checkUsernameSnap = await getDoc(checkUsernameRef);
-                        if (!checkUsernameSnap.exists()) {
-                            break;
-                        }
-                        suffix++;
-                        finalUsername = `${username}${suffix}`;
-                        if (finalUsername.length > 20) {
-                            finalUsername = `${username.substring(0, 16)}${suffix}`;
-                        }
-                    }
-
                     await setDoc(userDocRef, {
                         uid: firebaseUser.uid,
                         email: firebaseUser.email || null,
-                        username: finalUsername,
+                        username: username, // Assign the (potentially non-unique) username directly
                         onboarded: false,
                         profileCreatedAt: new Date(),
                     });
-                    await setDoc(doc(db, 'usernames', finalUsername), { uid: firebaseUser.uid });
+                    // await setDoc(doc(db, 'usernames', finalUsername), { uid: firebaseUser.uid }); // This line is removed
                 }
             }
         });
