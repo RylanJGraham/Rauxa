@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, Alert } from 'react-native';
 import { db, auth } from '../firebase';
-import { collection, getDocs, query, where, doc, updateDoc, deleteDoc, setDoc, getDoc, runTransaction, FieldValue } from 'firebase/firestore';
-import { arrayUnion, serverTimestamp } from 'firebase/firestore'; // For v9+ modular SDK
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  doc,
+  updateDoc,
+  deleteDoc,
+  setDoc,
+  getDoc,
+  runTransaction,
+  arrayUnion, // Import arrayUnion
+  serverTimestamp // Import serverTimestamp
+} from 'firebase/firestore';
 
 const HubScreen = () => {
   const [rsvps, setRsvps] = useState([]);
@@ -62,10 +74,23 @@ const HubScreen = () => {
     }
 
     try {
+      // Fetch event details to get hostId and eventName
+      const eventRef = doc(db, "live", eventId);
+      const eventDoc = await getDoc(eventRef);
+      if (!eventDoc.exists) {
+        Alert.alert("Error", "Event not found.");
+        return;
+      }
+      const eventData = eventDoc.data();
+      const hostId = eventData.host;
+      const eventName = eventData.title || `Event ${eventId.substring(0, 4)}...`; // Use title for eventName
+
+      const chatRef = doc(db, "chats", eventId); // Reference to the potential chat document
+
       await runTransaction(db, async (transaction) => {
         const pendingRef = doc(db, 'live', eventId, 'pending', requestId);
-        // Changed 'approved' to 'attendees' here
         const attendeeRef = doc(db, 'live', eventId, 'attendees', requestId);
+        const chatDoc = await transaction.get(chatRef); // Get chat document within transaction
 
         const pendingDoc = await transaction.get(pendingRef);
 
@@ -74,15 +99,70 @@ const HubScreen = () => {
         }
 
         // Move the request from 'pending' to 'attendees'
-        transaction.set(attendeeRef, { ...pendingDoc.data(), acceptedAt: serverTimestamp() }); // Changed to acceptedAt
+        transaction.set(attendeeRef, { ...pendingDoc.data(), acceptedAt: serverTimestamp() });
         transaction.delete(pendingRef);
+
+        // --- CHAT CREATION/UPDATE LOGIC ---
+        if (!chatDoc.exists) {
+          // This is the FIRST attendee being accepted for this event, so create the chat
+          console.log(`Creating new chat for event ${eventId}. Host: ${hostId}, First Attendee: ${rsvpUserId}`);
+
+          // Create the chat document
+          transaction.set(chatRef, {
+            eventId: eventId,
+            name: eventName, // Event title as chat name
+            hostId: hostId,
+            type: "event_group",
+            participants: [hostId, rsvpUserId], // Add both host and the first accepted user
+            createdAt: serverTimestamp(),
+            lastMessage: {
+              text: `Welcome to the ${eventName} chat!`,
+              senderId: "system", // Initial welcome message from system
+              timestamp: serverTimestamp(),
+            },
+            lastMessageTimestamp: serverTimestamp(),
+          });
+
+          // Add the initial system welcome message to the messages subcollection
+          transaction.set(collection(chatRef, "messages").doc(), {
+            senderId: "system",
+            text: `Welcome to ${eventName} chat! Only accepted attendees and host can see this chat.`,
+            timestamp: serverTimestamp(),
+            type: "system",
+          });
+
+          // Add a system message for the accepted user joining
+          transaction.set(collection(chatRef, "messages").doc(), {
+            senderId: "system",
+            text: `${rsvpUserId} joined the chat.`, // ChatDetailScreen will resolve this ID to name
+            timestamp: serverTimestamp(),
+            type: "system",
+          });
+
+        } else {
+          // Chat already exists, add the new participant
+          console.log(`Adding ${rsvpUserId} to existing chat ${eventId}`);
+
+          transaction.update(chatRef, {
+            participants: arrayUnion(rsvpUserId), // Add new participant to the array
+          });
+
+          // Add a system message for the new user joining
+          transaction.set(collection(chatRef, "messages").doc(), {
+            senderId: "system",
+            text: `${rsvpUserId} joined the chat.`, // ChatDetailScreen will resolve this ID to name
+            timestamp: serverTimestamp(),
+            type: "system",
+          });
+        }
+        // --- END CHAT CREATION/UPDATE LOGIC ---
       });
 
       setHostingRequests(prevRequests =>
         prevRequests.filter(req => req.requestId !== requestId)
       );
 
-      Alert.alert("Success", "RSVP request accepted. Chat will be created/updated.");
+      Alert.alert("Success", "RSVP request accepted. Chat updated accordingly.");
 
     } catch (error) {
       console.error('Error accepting request:', error);

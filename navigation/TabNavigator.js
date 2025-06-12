@@ -3,12 +3,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
 import TabBarIcon from './TabBarIcon';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Platform, TouchableOpacity } from 'react-native'; // Ensure TouchableOpacity is imported
+import { Platform, TouchableOpacity } from 'react-native';
 
 // Import screens
-import MatchScreen from '../screens/EventSwipeScreen'; // MatchScreen does NOT need modal handlers
+import MatchScreen from '../screens/EventSwipeScreen';
 import ChatScreen from '../screens/ChatScreen';
-import AddScreen from '../screens/AddScreen'; // AddScreen WILL need modal handlers
+import ChatDetailsScreen from '../screens/ChatDetailsScreen'; // <-- NEW: Import ChatDetailScreen
+import AddScreen from '../screens/AddScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import HubScreen from '../screens/HubScreen';
 
@@ -28,28 +29,40 @@ import MainInactiveIcon from '../assets/tabs/Home.png';
 import HubActiveIcon from '../assets/tabs/Hub-Active.png';
 import HubInactiveIcon from '../assets/tabs/Hub.png';
 
-
 const Tab = createBottomTabNavigator();
+const ChatStack = createNativeStackNavigator(); // <-- NEW: Create a stack navigator for the Chat tab
+
+// NEW: Define the Chat Stack Navigator component
+const ChatStackScreen = () => {
+  return (
+    <ChatStack.Navigator
+      initialRouteName="ChatList"
+      screenOptions={{
+        headerShown: false, // Hide header for screens in this stack
+      }}
+    >
+      <ChatStack.Screen name="ChatList" component={ChatScreen} />
+      <ChatStack.Screen name="ChatDetail" component={ChatDetailsScreen} />
+    </ChatStack.Navigator>
+  );
+};
+
 
 const TabNavigator = () => {
-  // State for EventDetailsModal
   const [isEventDetailsModalVisible, setIsEventDetailsModalVisible] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [selectedSourceCollection, setSelectedSourceCollection] = useState(null);
 
-  // State for CreateMeetupScreen
   const [isCreateMeetupModalVisible, setIsCreateMeetupModalVisible] = useState(false);
   const [createMeetupMode, setCreateMeetupMode] = useState(null);
   const [createMeetupEventData, setCreateMeetupEventData] = useState(null);
 
-  // Function to open the Event Details Modal
   const handleOpenEventDetailsModal = (eventId, sourceCollection) => {
     setSelectedEventId(eventId);
     setSelectedSourceCollection(sourceCollection);
     setIsEventDetailsModalVisible(true);
   };
 
-  // Function to open the Create Meetup Modal
   const handleOpenCreateMeetupModal = (mode, eventData) => {
     setCreateMeetupMode(mode);
     setCreateMeetupEventData(eventData);
@@ -95,14 +108,12 @@ const TabNavigator = () => {
             />
           ),
           tabBarShowLabel: false,
-          // Custom press handler for the 'Add' tab to open CreateMeetupScreen modal
           tabBarButton: (props) => {
-            // This ensures that when the "Add" tab is pressed, it directly opens the modal
             if (props.accessibilityLabel === 'Host') {
               return (
                 <TouchableOpacity
                   {...props}
-                  onPress={() => handleOpenCreateMeetupModal('create', {})} // Open CreateMeetup modal directly
+                  onPress={() => handleOpenCreateMeetupModal('create', {})}
                   style={props.style}
                 />
               );
@@ -111,10 +122,9 @@ const TabNavigator = () => {
           },
         })}
       >
-        {/* MatchScreen (EventSwipeScreen) - No modal handlers needed here as per clarification */}
         <Tab.Screen
           name="Main"
-          component={MatchScreen} // Just assign the component directly
+          component={MatchScreen}
           options={{
             tabBarLabel: 'Match',
             tabBarIcon: ({ focused }) => (
@@ -123,13 +133,14 @@ const TabNavigator = () => {
                 activeIcon={MainActiveIcon}
                 inactiveIcon={MainInactiveIcon}
               />
-            )
+            ),
           }}
         />
 
+        {/* Updated: Chat tab now renders the ChatStackScreen */}
         <Tab.Screen
           name="Chat"
-          component={ChatScreen}
+          component={ChatStackScreen} // <-- NEW: Use the ChatStackScreen here
           options={{
             tabBarLabel: 'Chat',
             tabBarIcon: ({ focused }) => (
@@ -139,21 +150,10 @@ const TabNavigator = () => {
                 inactiveIcon={ChatInactiveIcon}
                 size={35}
               />
-            )
+            ),
           }}
         />
 
-        {/*
-          AddScreen - This screen now receives the modal handlers.
-          It can use them to open event details from within the screen,
-          or trigger the Create Meetup modal if it has an in-screen button for it.
-          Note: The `tabBarButton` for 'Add' is still set to *directly* open the modal.
-          This means the user will see the Create Meetup Modal immediately upon tapping the 'Add' tab,
-          rather than navigating to AddScreen's default view first.
-          If AddScreen is supposed to be the destination where these actions are initiated,
-          you might adjust the `tabBarButton` logic (e.g., `onPress={() => props.onPress()}`).
-          But sticking to the current setup, it makes sense to pass the handlers to AddScreen.
-        */}
         <Tab.Screen
           name="Add"
           options={{
@@ -167,7 +167,6 @@ const TabNavigator = () => {
             ),
           }}
         >
-          {/* AddScreen now receives the modal handlers */}
           {(props) => (
             <AddScreen
               {...props}
@@ -202,13 +201,12 @@ const TabNavigator = () => {
                 activeIcon={ProfileActiveIcon}
                 inactiveIcon={ProfileInactiveIcon}
               />
-            )
+            ),
           }}
         />
       </Tab.Navigator>
 
-      {/* Render EventDetailsModal and CreateMeetupScreen outside the Tab.Navigator.
-          This positioning is what ensures they overlay everything, including the tab bar. */}
+      {/* Render EventDetailsModal and CreateMeetupScreen outside the Tab.Navigator. */}
       {isEventDetailsModalVisible && (
         <EventDetailsModal
           isVisible={isEventDetailsModalVisible}

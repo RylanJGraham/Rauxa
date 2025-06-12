@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Alert, View, ScrollView, TouchableOpacity, Text, StyleSheet, Dimensions, Platform, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-// Ionicons is no longer needed directly in CreateMeetupScreen if only used for the close button
-// import { Ionicons } from '@expo/vector-icons';
 import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -294,7 +292,7 @@ const CreateMeetupScreen = ({ isVisible, onClose, eventData, mode }) => {
       await setDoc(newDocRef, {
         Sponsor: "",
         active: true,
-        attendeesCount: 1,
+        // Removed attendeesCount: 1, This will now be managed by the HubScreen upon first acceptance
         createdAt: now,
         updatedAt: now,
         date: selectedDate,
@@ -310,13 +308,17 @@ const CreateMeetupScreen = ({ isVisible, onClose, eventData, mode }) => {
         uid: user.uid,
       });
 
-      const hostAttendeeRef = doc(db, 'live', eventId, 'attendees', user.uid);
-      await setDoc(hostAttendeeRef, {
-        userId: user.uid,
-        joinedAt: now,
-        role: "host",
-      });
-      console.log(`Host ${user.uid} added to attendees for event ${eventId}`);
+      // --- REMOVED: Host is no longer added to 'attendees' here ---
+      // This is crucial. The host will be added to the 'attendees' subcollection
+      // (and thus trigger the chat creation/update) only when the first guest is accepted in HubScreen.
+      // const hostAttendeeRef = doc(db, 'live', eventId, 'attendees', user.uid);
+      // await setDoc(hostAttendeeRef, {
+      //   userId: user.uid,
+      //   joinedAt: now,
+      //   role: "host",
+      // });
+      // console.log(`Host ${user.uid} added to attendees for event ${eventId}`);
+      // --- END REMOVED ---
 
       Alert.alert("Success!", "Your event has been created successfully!");
       onClose(); // Close the modal
@@ -491,16 +493,8 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     paddingBottom: 40,
-    // Removed paddingTop: 60 as the close button is no longer here
-    paddingTop: 10, // Adjust as needed to give space above the gallery or first content element
+    paddingTop: 10,
   },
-  // The closeButton style is no longer needed here, as it's moved to GallerySection.js
-  // closeButton: {
-  //   position: 'absolute',
-  //   top: 20,
-  //   right: 20,
-  //   zIndex: 10,
-  // },
   buttonRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
