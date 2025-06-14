@@ -1,7 +1,6 @@
 import React from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import moment from 'moment'; // <--- NEW: Import moment for consistency
 
 const GenericEditModal = ({
   visible,

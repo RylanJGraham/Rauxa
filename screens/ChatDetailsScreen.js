@@ -1,4 +1,4 @@
-// ChatDetailScreen.js
+// components/chat/ChatDetailScreen.js
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -22,7 +22,7 @@ import {
   addDoc,
   doc,
   getDoc,
-  updateDoc,
+  updateDoc, // <-- Ensure updateDoc is imported
   serverTimestamp,
   getDocs,
 } from "firebase/firestore";
@@ -90,6 +90,28 @@ const ChatDetailScreen = ({ route, navigation }) => {
     });
     return () => unsubscribeAuth(); // Cleanup subscription on unmount
   }, [navigation]);
+
+  // Mark chat as 'seen' once loaded
+  useEffect(() => {
+    if (chatId && currentUserId) {
+      const chatDocRef = doc(db, "chats", chatId);
+      getDoc(chatDocRef).then(async (docSnap) => {
+        if (docSnap.exists() && docSnap.data().isNewMatch === true) {
+          console.log(`ChatDetailScreen: Marking chat ${chatId} as not new.`);
+          try {
+            await updateDoc(chatDocRef, {
+              isNewMatch: false,
+            });
+          } catch (error) {
+            console.error("Error updating isNewMatch for chat:", chatId, error);
+          }
+        }
+      }).catch(error => {
+        console.error("Error fetching chat for isNewMatch check:", error);
+      });
+    }
+  }, [chatId, currentUserId]); // Depend on chatId and currentUserId
+
 
   // Fetch Chat Details, Participant Info, and Event Header Image/Name
   useEffect(() => {
@@ -262,18 +284,9 @@ const ChatDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  useEffect(() => {
-    if (currentUserId && chatId) {
-      console.log(`ChatDetailScreen: User ${currentUserId} entered chat ${chatId}. Updating read receipt.`);
-      const readReceiptRef = doc(db, "chats", chatId, "readReceipts", currentUserId);
-      setDoc(readReceiptRef, {
-        lastReadTimestamp: serverTimestamp(), // Use server timestamp for accuracy
-      }, { merge: true }).catch(error => {
-        console.error("Error updating read receipt for chat:", chatId, error);
-      });
-    }
-  }, [currentUserId, chatId]); // Dependency on currentUserId and chatId
-
+  // --- READ RECEIPT LOGIC REMOVED ---
+  // The useEffect responsible for writing read receipts is removed.
+  // This means `lastReadTimestamp` will no longer be updated.
 
   // Scroll to bottom when messages update (initial load or new messages sent)
   useEffect(() => {
@@ -434,7 +447,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
       )}
       </LinearGradient>
 
-      
   );
 };
 
@@ -494,7 +506,7 @@ const styles = StyleSheet.create({
   },
   messagesContentContainer: {
     paddingBottom: 10, // Padding at the visual bottom (newest messages)
-    paddingTop: 10,    // Padding at the visual top (oldest messages)
+    paddingTop: 10,     // Padding at the visual top (oldest messages)
   },
   allMessagesLoadedText: {
     color: '#a0aec0',

@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, Dimensions, Text, TouchableOpacity, Animated, Easing, PanResponder, Platform, StatusBar } from 'react-native';
 import { Image } from 'expo-image';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, getDocs, query, where } from 'firebase/firestore'; // Import query and where
 import { db, auth } from '../firebase';
 import { LinearGradient } from 'expo-linear-gradient';
 import EventCard from '../components/matching/EventCard';
 import SwipeOverlay from '../components/matching/SwipeOverlay';
 import WaveIcon from '../assets/matching/wave.png';
 import NoIcon from '../assets/matching/No.png';
-import { onAuthStateChanged } from 'firebase/auth'; // Keep this for initial auth wait
-import { serverTimestamp } from 'firebase/firestore'; // Import serverTimestamp
+import { onAuthStateChanged } from 'firebase/auth';
+import { serverTimestamp } from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('screen');
 
@@ -17,28 +17,16 @@ const EventSwipeScreen = () => {
   const [events, setEvents] = useState([]);
   const [eventIndex, setEventIndex] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
-  const [currentUserId, setCurrentUserId] = useState(null); // New state to hold user ID
+  const [currentUserId, setCurrentUserId] = useState(null);
+
+  // useRef to hold the set of event IDs the user has already seen (RSVP'd or declined)
+  const seenEventIdsRef = useRef(new Set());
 
   // Using a ref for isSwiping to avoid re-renders when only animation state changes
   const isSwipingRef = useRef(false);
   const setIsSwiping = (value) => {
     isSwipingRef.current = value;
   };
-
-  const waitForAuth = () =>
-    new Promise((resolve) => {
-      const unsub = onAuthStateChanged(auth, (user) => {
-        if (user) {
-          unsub();
-          resolve(user);
-        } else {
-          // Handle case where user logs out while on this screen
-          // Maybe navigate them to login or show a message
-          console.log("No user authenticated during waitForAuth.");
-          resolve(null); // Resolve with null if no user
-        }
-      });
-    });
 
   const rotate = translateX.interpolate({
     inputRange: [-width, 0, width],
@@ -51,7 +39,6 @@ const EventSwipeScreen = () => {
     extrapolate: 'clamp',
   });
 
-  // Passed currentUserId and currentEvent directly to performSwipeLogic
   const performSwipeLogic = async (direction, currentEventData, userId) => {
     if (!currentEventData || !userId) {
       console.log("Error: No current event data or user ID for swipe logic.");
@@ -59,35 +46,44 @@ const EventSwipeScreen = () => {
     }
 
     const swipeType = direction === 'right' ? 'rsvp' : 'declined';
-
-    // It's generally better to use serverTimestamp() for consistency and accuracy
-    // rather than client-generated formatted strings.
-    // If you need the formatted string for display, format it on the client
-    // after fetching the timestamp.
     const swipeData = {
-      swipedAt: serverTimestamp(), // Use serverTimestamp()
+      swipedAt: serverTimestamp(),
     };
 
     try {
+      // Record the swipe for the user
       await setDoc(doc(db, 'users', userId, swipeType, currentEventData.id), swipeData);
       console.log(`${swipeType.toUpperCase()} saved for ${currentEventData.id} by ${userId}`);
 
+      // Add to seenEventIdsRef immediately on successful swipe
+      seenEventIdsRef.current.add(currentEventData.id);
+
+      // Filter out the swiped event from the current state immediately
+      setEvents(prevEvents => prevEvents.filter(event => event.id !== currentEventData.id));
+      setEventIndex(prev => {
+        // If we swiped the last event, ensure index doesn't go out of bounds
+        return prev >= (events.length - 1) ? 0 : prev; // Reset to 0 if no more or stay at current for next
+      });
+
+
       if (direction === 'right') {
-        const attendeeRef = doc(db, 'live', currentEventData.id, 'pending', userId); // userId of the swiper
+        // Add user to event's pending list
+        const attendeeRef = doc(db, 'live', currentEventData.id, 'pending', userId);
         await setDoc(attendeeRef, {
-          joinedAt: serverTimestamp(), // Use serverTimestamp()
+          joinedAt: serverTimestamp(),
           role: 'member',
-          userId: userId, // User ID of the swiper
+          userId: userId,
         });
         console.log(`User ${userId} added to event ${currentEventData.id} pending list`);
       }
     } catch (error) {
       console.error(`Firestore operation failed:`, error);
+      // Optional: If swipe logic fails, you might want to revert the UI changes or show an error.
+      // For now, we'll let it stay swiped if it visually disappeared.
     }
   };
 
   const handleSwipeAnimationAndLogic = (direction) => {
-    // Ensure we have a current event and user ID before starting animation and logic
     const currentEvent = events[eventIndex];
     if (!currentEvent || !currentUserId) {
       console.log("No current event or user ID available to perform swipe.");
@@ -102,39 +98,36 @@ const EventSwipeScreen = () => {
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start(async () => {
-      // Pass the current event and user ID
+      // Perform logic AFTER animation completes
       await performSwipeLogic(direction, currentEvent, currentUserId);
-      translateX.setValue(0);
-      setEventIndex(prev => prev + 1);
+      translateX.setValue(0); // Reset position for the next card
+
+      // Note: setEventIndex is handled within performSwipeLogic now for immediate UI update.
     });
   };
 
-  const handleSwipe = (direction) => {
-    // Buttons should also respect the check
+  const handleSwipe = useCallback((direction) => {
     handleSwipeAnimationAndLogic(direction);
-  };
+  }, [events, eventIndex, currentUserId]); // Depend on events, eventIndex, currentUserId
 
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10,
       onPanResponderGrant: () => {
-        // Stop any ongoing animation
         translateX.stopAnimation();
         setIsSwiping(true);
       },
       onPanResponderMove: (_, gestureState) => {
-        // Only update translateX if there's an event to swipe
-        if (events[eventIndex]) {
+        if (events[eventIndex]) { // Only allow move if there's a card
           translateX.setValue(gestureState.dx);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
         setIsSwiping(false);
 
-        // Crucial: check if there's a current event before processing swipe
         if (!events[eventIndex]) {
           console.log("No current event to swipe on release.");
-          translateX.setValue(0); // Reset position if no event
+          translateX.setValue(0);
           return;
         }
 
@@ -154,7 +147,6 @@ const EventSwipeScreen = () => {
       },
       onPanResponderTerminate: () => {
         setIsSwiping(false);
-        // Reset position on termination, but only if there's a card
         if (events[eventIndex]) {
           Animated.spring(translateX, {
             toValue: 0,
@@ -166,145 +158,226 @@ const EventSwipeScreen = () => {
     })
   ).current;
 
-  useEffect(() => {
-  // Listen for auth state changes and set currentUserId
-  const unsubscribe = onAuthStateChanged(auth, (user) => {
-    console.log("Auth state changed:", user ? "User is logged in (UID: " + user.uid + ")" : "User is logged out"); // ADD THIS LINE
-    if (user) {
-      setCurrentUserId(user.uid);
-    } else {
-      setCurrentUserId(null);
-      setEvents([]); // Clear events if user logs out
-      setEventIndex(0);
-      console.log("User logged out or no user found.");
-      // Potentially navigate to login screen here
-    }
-  });
+  // Helper function to process event data (extracted for reusability and clarity)
+  // This function fetches attendees and host profile info.
+  const processEventData = useCallback(async (eventId, eventData) => {
+    try {
+      // Fetch attendees (pending/attendees can be the same structure for simplicity here)
+      const attendeesRef = collection(db, 'live', eventId, 'pending'); // Or 'attendees' if you move accepted users there
+      const attendeesSnapshot = await getDocs(attendeesRef);
+      const attendeePromises = attendeesSnapshot.docs.map(async attendeeDoc => {
+        const attendeeId = attendeeDoc.data().userId;
+        if (!attendeeId) return null; // Skip if no userId
 
-  return () => unsubscribe(); // Cleanup auth listener
-}, []); // Run once on component mount
+        try {
+          const profileInfoCollectionRef = collection(db, 'users', attendeeId, 'ProfileInfo');
+          const profileDocSnap = await getDocs(profileInfoCollectionRef);
+          const userInfo = profileDocSnap.docs.find(d => d.id === 'userinfo')?.data();
+          const profileImages = (userInfo?.profileImages || []).filter(Boolean);
+          return { userId: attendeeId, profileImages, name: `${userInfo?.displayFirstName || ''} ${userInfo?.displayLastName || ''}`.trim() };
+        } catch (e) {
+          console.warn(`Error fetching attendee profile for ${attendeeId}:`, e);
+          return null;
+        }
+      });
+      const attendeeProfiles = (await Promise.all(attendeePromises)).filter(Boolean);
 
-  useEffect(() => {
-    const initializeAndFetchEvents = async () => {
-      if (!currentUserId) {
-        console.log("Waiting for user ID to fetch events...");
-        return; // Don't fetch until user ID is available
+      // Fetch host info
+      let hostInfo = null;
+      if (eventData.host) {
+        try {
+          const hostProfileInfoCollectionRef = collection(db, 'users', eventData.host, 'ProfileInfo');
+          const hostProfileSnap = await getDocs(hostProfileInfoCollectionRef);
+          const hostUserInfo = hostProfileSnap.docs.find(d => d.id === 'userinfo')?.data();
+          const profileImages = (hostUserInfo?.profileImages || []).filter(Boolean);
+          hostInfo = {
+            userId: eventData.host,
+            profileImages,
+            name: `${hostUserInfo?.displayFirstName || ''} ${hostUserInfo?.displayLastName || ''}`.trim(),
+          };
+        } catch (e) {
+          console.warn("Error fetching host profile:", e);
+        }
       }
 
-      try {
-        console.log('Fetching live events...');
+      return {
+        id: eventId,
+        ...eventData,
+        attendees: attendeeProfiles,
+        hostInfo,
+      };
+    } catch (error) {
+      console.error(`Error processing event ${eventId}:`, error);
+      return null;
+    }
+  }, []); // No dependencies as it uses db from closure and passes eventId/eventData
 
-        const [rsvpSnapshot, declinedSnapshot] = await Promise.all([
-          getDocs(collection(db, 'users', currentUserId, 'rsvp')),
-          getDocs(collection(db, 'users', currentUserId, 'declined'))
-        ]);
+  // Effect for Authentication State Changes
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setCurrentUserId(user.uid);
+      } else {
+        setCurrentUserId(null);
+        setEvents([]); // Clear events if user logs out
+        setEventIndex(0);
+        seenEventIdsRef.current.clear(); // Clear seen IDs too
+        console.log("User logged out or no user found.");
+      }
+    });
+    return () => unsubscribeAuth();
+  }, []);
 
-        const seenEventIds = new Set([
-          ...rsvpSnapshot.docs.map(doc => doc.id),
-          ...declinedSnapshot.docs.map(doc => doc.id)
-        ]);
+  // Effect for Real-time Event Data (Live, RSVP, Declined)
+  useEffect(() => {
+    if (!currentUserId) {
+      console.log("No currentUserId, skipping event listeners setup.");
+      return;
+    }
 
-        const liveEventsSnapshot = await getDocs(collection(db, 'live'));
-        console.log('Live events fetched:', liveEventsSnapshot.docs.length);
+    // Unsubscribe functions for cleanup
+    let unsubscribeLiveEvents = () => {};
+    let unsubscribeRsvp = () => {};
+    let unsubscribeDeclined = () => {};
 
-        const unseenEvents = liveEventsSnapshot.docs
-          .filter(doc => {
-            const eventData = doc.data();
-            return !seenEventIds.has(doc.id) && eventData.host !== currentUserId;
-          })
-          .map(doc => ({ id: doc.id, ...doc.data() }));
+    // 1. Setup real-time listener for RSVP events
+    unsubscribeRsvp = onSnapshot(collection(db, 'users', currentUserId, 'rsvp'), (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          seenEventIdsRef.current.add(change.doc.id);
+          // Filter out the event immediately from the visible stack
+          setEvents(prevEvents => prevEvents.filter(event => event.id !== change.doc.id));
+          console.log(`[RSVP Listener] Event ${change.doc.id} added to seen. Removed from stack.`);
+        } else if (change.type === 'removed') {
+          seenEventIdsRef.current.delete(change.doc.id);
+          // If you want to re-add, you'd need to re-fetch and add to events,
+          // but typically not needed for a swipe screen.
+          console.log(`[RSVP Listener] Event ${change.doc.id} removed from seen.`);
+        }
+      });
+      // After any change, ensure our index is not out of bounds if events array shrunk
+      setEventIndex(prev => Math.min(prev, events.length > 0 ? events.length - 1 : 0));
+    }, (error) => console.error("Error listening to RSVP events:", error));
 
-        console.log('Unseen and not self-hosted events:', unseenEvents.length);
+    // 2. Setup real-time listener for Declined events
+    unsubscribeDeclined = onSnapshot(collection(db, 'users', currentUserId, 'declined'), (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          seenEventIdsRef.current.add(change.doc.id);
+          // Filter out the event immediately from the visible stack
+          setEvents(prevEvents => prevEvents.filter(event => event.id !== change.doc.id));
+          console.log(`[Declined Listener] Event ${change.doc.id} added to seen. Removed from stack.`);
+        } else if (change.type === 'removed') {
+          seenEventIdsRef.current.delete(change.doc.id);
+          console.log(`[Declined Listener] Event ${change.doc.id} removed from seen.`);
+        }
+      });
+      setEventIndex(prev => Math.min(prev, events.length > 0 ? events.length - 1 : 0));
+    }, (error) => console.error("Error listening to Declined events:", error));
 
-        const processedEvents = await Promise.all(
-          unseenEvents.map(async event => {
-            // Fetch attendees
-            const attendeesSnapshot = await getDocs(
-              collection(db, 'live', event.id, 'attendees')
-            );
-            const attendeePromises = attendeesSnapshot.docs.map(async attendeeDoc => {
-              const attendeeId = attendeeDoc.data().userId;
-              // Ensure attendeeId is valid before fetching profile
-              if (!attendeeId) {
-                console.warn("Attendee ID is undefined for event:", event.id, "attendeeDoc:", attendeeDoc.id);
-                return null;
-              }
-              try {
-                // IMPORTANT: You're querying a subcollection 'ProfileInfo' of 'users'.
-                // If 'ProfileInfo' contains a single document, like 'userinfo',
-                // you should use doc(db, 'users', attendeeId, 'ProfileInfo', 'userinfo')
-                // and then getDoc() instead of getDocs(collection(...)).
-                // Assuming 'ProfileInfo' contains multiple documents and one is 'userinfo'.
-                const profileInfoCollectionRef = collection(db, 'users', attendeeId, 'ProfileInfo');
-                const profileDocSnap = await getDocs(profileInfoCollectionRef); // Fetching all docs in subcollection
-                const userInfo = profileDocSnap.docs.find(d => d.id === 'userinfo')?.data();
+    // 3. Setup real-time listener for Live events
+    unsubscribeLiveEvents = onSnapshot(collection(db, 'live'), async (snapshot) => {
+      console.log('[Live Events Listener] Snapshot received.');
+      const newProcessedEvents = [];
 
-                const profileImages = (userInfo?.profileImages || []).filter(Boolean);
-                return { userId: attendeeId, profileImages };
-              } catch (e) {
-                console.warn(`Error fetching attendee profile for ${attendeeId}:`, e);
-                return null;
-              }
-            });
-            const attendeeProfiles = (await Promise.all(attendeePromises)).filter(Boolean);
+      // Process only changes
+      for (const docChange of snapshot.docChanges()) {
+        const eventData = docChange.doc.data();
+        const eventId = docChange.doc.id;
 
-            // Fetch host info
-            let hostInfo = null;
-            if (event.host) { // Ensure host ID exists
-              try {
-                 // Similar correction here for host profile info
-                const hostProfileInfoCollectionRef = collection(db, 'users', event.host, 'ProfileInfo');
-                const hostProfileSnap = await getDocs(hostProfileInfoCollectionRef); // Fetching all docs in subcollection
-                const hostUserInfo = hostProfileSnap.docs.find(d => d.id === 'userinfo')?.data();
+        // Skip events hosted by the current user
+        if (eventData.host === currentUserId) {
+          console.log(`[Live Events Listener] Skipping self-hosted event: ${eventId}`);
+          continue;
+        }
 
-                const profileImages = (hostUserInfo?.profileImages || []).filter(Boolean);
-                hostInfo = {
-                  userId: event.host,
-                  profileImages,
-                  name: `${hostUserInfo?.displayFirstName || ''} ${hostUserInfo?.displayLastName || ''}`.trim(),
-                };
-              } catch (e) {
-                console.warn("Error fetching host profile:", e);
-              }
+        // Handle 'added' and 'modified' events
+        if (docChange.type === 'added' || docChange.type === 'modified') {
+          // Only consider if not already seen
+          if (!seenEventIdsRef.current.has(eventId)) {
+            const processedEvent = await processEventData(eventId, eventData);
+            if (processedEvent) {
+              newProcessedEvents.push(processedEvent);
+              console.log(`[Live Events Listener] Processed and queued for addition/update: ${eventId}`);
+            } else {
+              console.warn(`[Live Events Listener] Failed to process event ${eventId}. Skipping.`);
             }
-
-
-            return {
-              ...event,
-              attendees: attendeeProfiles,
-              hostInfo,
-            };
-          })
-        );
-
-        setEvents(processedEvents);
-        console.log('Events loaded successfully:', processedEvents.length);
-
-        const PREFETCH_LIMIT = 5;
-        processedEvents.slice(0, PREFETCH_LIMIT).forEach(eventToPreload => {
-          if (eventToPreload.photos && eventToPreload.photos.length > 0) {
-            eventToPreload.photos.forEach(uri => {
-              if (uri) Image.prefetch(uri);
-            });
+          } else {
+            console.log(`[Live Events Listener] Event ${eventId} already seen by user. Skipping.`);
           }
-          if (eventToPreload.hostInfo?.profileImages?.[0]) {
-            Image.prefetch(eventToPreload.hostInfo.profileImages[0]);
-          }
-          eventToPreload.attendees?.forEach(attendee => {
-            if (attendee.profileImages?.[0]) {
-              Image.prefetch(attendee.profileImages[0]);
+        }
+        // Handle 'removed' events
+        else if (docChange.type === 'removed') {
+          setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
+          console.log(`[Live Events Listener] Event ${eventId} removed from Firestore. Removing from stack.`);
+          // Remove from seen IDs if it was somehow in there (e.g., host deleted event after swipe)
+          seenEventIdsRef.current.delete(eventId);
+        }
+      }
+
+      setEvents(prevEvents => {
+        let updatedEvents = [...prevEvents];
+        const prevEventIds = new Set(prevEvents.map(e => e.id));
+
+        // Add new/modified events if they are not already in the array
+        newProcessedEvents.forEach(newEvent => {
+          if (!prevEventIds.has(newEvent.id)) {
+            updatedEvents.push(newEvent);
+            console.log(`[Live Events Listener] Added new event to state: ${newEvent.id}`);
+          } else {
+            // If it's a modified event, find it and update it
+            const index = updatedEvents.findIndex(e => e.id === newEvent.id);
+            if (index > -1) {
+              updatedEvents[index] = newEvent;
+              console.log(`[Live Events Listener] Updated existing event in state: ${newEvent.id}`);
             }
-          });
+          }
         });
 
-      } catch (error) {
-        console.error('Error in initializeAndFetchEvents:', error);
-      }
-    };
+        // Finally, filter out any events that are now in seenEventIdsRef or are self-hosted
+        // This ensures consistency after any internal state changes or external swipes.
+        updatedEvents = updatedEvents.filter(event =>
+          !seenEventIdsRef.current.has(event.id) && event.host !== currentUserId
+        );
 
-    // Only fetch events when currentUserId changes or is initially set
-    initializeAndFetchEvents();
-  }, [currentUserId]); // Dependency array for event fetching
+        console.log(`[Live Events Listener] Final events count in state: ${updatedEvents.length}`);
+        return updatedEvents;
+      });
+
+      // Prefetch images for the next few events
+      const PREFETCH_LIMIT = 5;
+      snapshot.docs.slice(0, PREFETCH_LIMIT).forEach(eventDoc => {
+        const eventToPreload = eventDoc.data();
+        if (eventToPreload.photos && eventToPreload.photos.length > 0) {
+          eventToPreload.photos.forEach(uri => {
+            if (uri) Image.prefetch(uri);
+          });
+        }
+        // Host and attendee profile images would also need to be preloaded here,
+        // but `processEventData` isn't fully integrated here for preloading specific URLs.
+        // This can be an enhancement later.
+      });
+
+    }, (error) => console.error("Error listening to live events:", error));
+
+    // Cleanup all listeners when currentUserId changes or component unmounts
+    return () => {
+      unsubscribeLiveEvents();
+      unsubscribeRsvp();
+      unsubscribeDeclined();
+      console.log("All Firestore listeners unsubscribed.");
+    };
+  }, [currentUserId, processEventData]); // Dependencies for this effect
+
+  // Ensure eventIndex stays valid if events array changes
+  useEffect(() => {
+    if (eventIndex >= events.length && events.length > 0) {
+      setEventIndex(events.length - 1);
+    } else if (events.length === 0) {
+      setEventIndex(0);
+    }
+  }, [events.length, eventIndex]);
+
 
   const currentEvent = events[eventIndex];
   const nextEvent = events[eventIndex + 1];
@@ -354,13 +427,12 @@ const EventSwipeScreen = () => {
                 { width: width, height: height },
               ]}
             >
-              <EventCard event={currentEvent} isSwiping={isSwipingRef.current} /> {/* Use ref here */}
-              {/* Buttons inside the animated card */}
+              <EventCard event={currentEvent} isSwiping={isSwipingRef.current} />
               <View style={[styles.actionButtonsInsideCard, { bottom: buttonBottomPosition }]}>
                 <TouchableOpacity
                   style={styles.iconButton}
                   onPress={() => handleSwipe('left')}
-                  disabled={isSwipingRef.current} // Disable buttons during animation
+                  disabled={isSwipingRef.current}
                 >
                   <Image source={NoIcon} style={styles.iconImage} resizeMode="contain" />
                 </TouchableOpacity>
@@ -368,7 +440,7 @@ const EventSwipeScreen = () => {
                 <TouchableOpacity
                   style={styles.iconButton}
                   onPress={() => handleSwipe('right')}
-                  disabled={isSwipingRef.current} // Disable buttons during animation
+                  disabled={isSwipingRef.current}
                 >
                   <Image source={WaveIcon} style={styles.iconImage} resizeMode="contain" />
                 </TouchableOpacity>
@@ -381,11 +453,23 @@ const EventSwipeScreen = () => {
         ) : (
           <View style={styles.endContainer}>
             <Text style={styles.doneText}>No more events</Text>
-            {/* Only show reset button if there were events previously */}
-            {events.length > 0 && (
-              <TouchableOpacity style={styles.resetButton} onPress={() => setEventIndex(0)}>
-                <Text style={styles.resetButtonText}>Reset</Text>
-              </TouchableOpacity>
+            {/* Show reset button if there were events previously or new events can be added */}
+            {(events.length === 0 && eventIndex === 0) ? (
+              <Text style={styles.subText}>Check back later for new events!</Text>
+            ) : (
+               // You can decide if you want a reset button in a live stream
+               // For a continuous stream, a reset button might not be meaningful.
+               // If you keep it, make sure it re-fetches or re-evaluates the stack.
+               // For now, let's assume it implies clearing and starting over.
+               <TouchableOpacity style={styles.resetButton} onPress={() => {
+                 setEvents([]);
+                 setEventIndex(0);
+                 seenEventIdsRef.current.clear();
+                 // Re-trigger fetch by briefly nulling then setting currentUserId, or adding a specific fetch function call
+                 // For now, relying on the listener to refill.
+               }}>
+                 <Text style={styles.resetButtonText}>Refresh Events</Text>
+               </TouchableOpacity>
             )}
           </View>
         )}
@@ -428,6 +512,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     marginTop: 100,
+  },
+  subText: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginTop: 10,
   },
 
   endContainer: {

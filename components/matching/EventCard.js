@@ -381,11 +381,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   activeDot: {
-    width: 80,
+    width: 48,
     backgroundColor: '#D9043D',
   },
   inactiveDot: {
-    width: 80,
+    width: 48,
     backgroundColor: '#D9043D',
   },
   tagsOverlay: {
