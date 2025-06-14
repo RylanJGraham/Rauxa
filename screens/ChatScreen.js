@@ -43,128 +43,147 @@ const ChatScreen = ({ navigation }) => {
 
   // 2. Fetch Chat Data and categorize them (MODIFIED)
   useEffect(() => {
-    if (!currentUserId) {
-      setChatList([]);
-      setNewMatchEvents([]);
-      return;
-    }
+  if (!currentUserId) {
+    setChatList([]);
+    setNewMatchEvents([]);
+    setLoading(false); // Ensure loading is false if no user
+    return;
+  }
 
-    const chatsQuery = query(
-      collection(db, "chats"),
-      where("participants", "array-contains", currentUserId),
-    );
+  setLoading(true); // Set loading to true when starting to fetch data
+
+  const chatsQuery = query(
+    collection(db, "chats"),
+    where("participants", "array-contains", currentUserId),
+  );
+
 
     console.log("ChatScreen: Setting up chat snapshot listener for:", currentUserId);
 
     const unsubscribeChats = onSnapshot(chatsQuery, async (snapshot) => {
-      console.log("ChatScreen: Chats snapshot received. Docs changed:", snapshot.docChanges().length);
-      const tempChatList = [];
-      const tempNewMatchEvents = [];
-      const profilesCache = new Map();
+    const tempChatList = [];
+    const tempNewMatchEvents = [];
+    const profilesCache = new Map(); // Cache for profiles
 
+    // Step 1: Collect all necessary data fetches concurrently
+    const chatProcessingPromises = snapshot.docs.map(async (chatDoc) => {
       try {
-        for (const chatDoc of snapshot.docs) {
-          try {
-            const chatData = chatDoc.data();
-            const chatId = chatDoc.id;
-            const eventId = chatData.eventId;
-            const isNewMatch = chatData.isNewMatch || false; // <-- Get the new flag
+        const chatData = chatDoc.data();
+        const chatId = chatDoc.id;
+        const eventId = chatData.eventId;
+        const isNewMatch = chatData.isNewMatch || false;
+        const participants = chatData.participants;
+        const participantCount = Array.isArray(participants) ? participants.length : 0;
 
-            const participants = chatData.participants;
-            const participantCount = Array.isArray(participants) ? participants.length : 0;
+        let chatTitle = "Unnamed Event";
+        let chatImageUrl = null;
+        let lastMessageText = chatData.lastMessage?.text || "No messages yet.";
+        let lastMessageSenderId = chatData.lastMessage?.senderId;
+        let lastMessageTimestamp = chatData.lastMessage?.timestamp;
 
-            let chatTitle = "Unnamed Event";
-            let chatImageUrl = null;
-
-            // Fetch Event Name (title) and Image from live/{eventId} for ALL chats
-            if (eventId) {
-              const eventRef = doc(db, "live", eventId);
-              const eventSnap = await getDoc(eventRef);
-              if (eventSnap.exists()) {
-                const eventData = eventSnap.data();
-                chatTitle = eventData.title || `Event ${eventId.substring(0, 4)}...`;
-                if (eventData.photos && eventData.photos.length > 0) {
-                  chatImageUrl = eventData.photos[0];
-                }
-              } else {
-                console.warn(`Event ${eventId} not found for chat ${chatId}.`);
-              }
-            } else {
-              chatTitle = chatData.name || "Direct Chat";
-              chatImageUrl = null;
+        // Fetch event details concurrently if eventId exists
+        if (eventId) {
+          const eventRef = doc(db, "live", eventId);
+          const eventSnap = await getDoc(eventRef); // Await this specific event fetch
+          if (eventSnap.exists()) {
+            const eventData = eventSnap.data();
+            chatTitle = eventData.title || `Event ${eventId.substring(0, 4)}...`;
+            if (eventData.photos && eventData.photos.length > 0) {
+              chatImageUrl = eventData.photos[0];
             }
-
-            // Determine if it's a "New Event Match" or a regular "Message"
-            // MODIFIED: Use isNewMatch flag AND participant count
-            if (isNewMatch && participantCount === 2) { // It's new AND a 2-person chat
-              tempNewMatchEvents.push({
-                id: chatId,
-                title: chatTitle,
-                image: chatImageUrl,
-                eventId: eventId,
-              });
-              console.log(`Added to newMatchEvents: ${chatId} (participants: ${participantCount}, isNewMatch: true)`);
-            } else if (participantCount >= 2) { // It's a groupchat OR a seen 2-person match
-              let lastMessageText = chatData.lastMessage?.text || "No messages yet.";
-              let lastMessageSenderId = chatData.lastMessage?.senderId;
-              let lastMessageSenderDisplayName = "System";
-              let lastMessageTimestamp = chatData.lastMessage?.timestamp;
-
-              // Fetch Last Message Sender's Name (only for regular messages)
-              if (lastMessageSenderId && lastMessageSenderId !== "system") {
-                if (!profilesCache.has(lastMessageSenderId)) {
-                  const profileRef = doc(db, "users", lastMessageSenderId, "ProfileInfo", "userinfo");
-                  const profileSnap = await getDoc(profileRef);
-                  if (profileSnap.exists()) {
-                    const profileData = profileSnap.data();
-                    const displayName = profileData.displayFirstName || profileData.name || `User ${lastMessageSenderId.substring(0, 4)}`;
-                    profilesCache.set(lastMessageSenderId, displayName);
-                  } else {
-                    profilesCache.set(lastMessageSenderId, `User ${lastMessageSenderId.substring(0, 4)}`);
-                  }
-                }
-                lastMessageSenderDisplayName = profilesCache.get(lastMessageSenderId);
-              } else if (lastMessageSenderId === "system") {
-                lastMessageSenderDisplayName = "Rauxa";
-              }
-
-              tempChatList.push({
-                id: chatId,
-                title: chatTitle,
-                sender: lastMessageSenderDisplayName,
-                message: lastMessageText,
-                timestamp: lastMessageTimestamp,
-                image: chatImageUrl,
-                eventId: eventId,
-                hasUnread: false, // Explicitly set to false or manage differently if needed
-              });
-              console.log(`Added to chatList: ${chatId} (participants: ${participantCount}, isNewMatch: ${isNewMatch})`);
-            } else {
-              console.log(`Chat ${chatId} skipped: Not enough participants (${participantCount}).`);
-            }
-          } catch (innerError) {
-            console.error(`ChatScreen: Error processing chat document ${chatDoc.id}:`, innerError);
+          } else {
+            console.warn(`Event ${eventId} not found for chat ${chatId}.`);
           }
+        } else {
+          chatTitle = chatData.name || "Direct Chat";
         }
 
-        // Sort regular chats by timestamp
-        tempChatList.sort((a, b) => {
-          const tsA = a.timestamp ? a.timestamp.toMillis() : 0;
-          const tsB = b.timestamp ? b.timestamp.toMillis() : 0;
-          return tsB - tsA;
-        });
+        // Fetch last message sender's profile concurrently if needed
+        let lastMessageSenderDisplayName = "System";
+        if (lastMessageSenderId && lastMessageSenderId !== "system") {
+          if (!profilesCache.has(lastMessageSenderId)) {
+            const profileRef = doc(db, "users", lastMessageSenderId, "ProfileInfo", "userinfo");
+            const profileSnap = await getDoc(profileRef); // Await this specific profile fetch
+            if (profileSnap.exists()) {
+              const profileData = profileSnap.data();
+              const displayName = profileData.displayFirstName || profileData.name || `User ${lastMessageSenderId.substring(0, 4)}`;
+              profilesCache.set(lastMessageSenderId, displayName);
+            } else {
+              profilesCache.set(lastMessageSenderId, `User ${lastMessageSenderId.substring(0, 4)}`);
+            }
+          }
+          lastMessageSenderDisplayName = profilesCache.get(lastMessageSenderId);
+        } else if (lastMessageSenderId === "system") {
+          lastMessageSenderDisplayName = "Rauxa";
+        }
 
-        setNewMatchEvents(tempNewMatchEvents);
-        setChatList(tempChatList);
-      } catch (outerError) {
-        console.error("ChatScreen: Error during snapshot processing:", outerError);
+        return {
+          chatId,
+          chatTitle,
+          chatImageUrl,
+          isNewMatch,
+          participantCount,
+          lastMessageText,
+          lastMessageSenderDisplayName,
+          lastMessageTimestamp,
+          eventId,
+        };
+      } catch (innerError) {
+        console.error(`ChatScreen: Error processing chat document ${chatDoc.id}:`, innerError);
+        return null; // Return null for failed processing
       }
-    }, (error) => {
-      console.error("ChatScreen: Error listening to chats (outer snapshot error):", error);
     });
 
-    return () => unsubscribeChats();
-  }, [currentUserId]);
+    // Resolve all promises concurrently
+    const processedChats = await Promise.all(chatProcessingPromises);
+
+    // Step 2: Filter out failed ones and categorize
+    processedChats.forEach(processedChat => {
+      if (!processedChat) return; // Skip if processing failed
+
+      const {
+        chatId, chatTitle, chatImageUrl, isNewMatch, participantCount,
+        lastMessageText, lastMessageSenderDisplayName, lastMessageTimestamp, eventId
+      } = processedChat;
+
+      if (isNewMatch && participantCount === 2) {
+        tempNewMatchEvents.push({
+          id: chatId,
+          title: chatTitle,
+          image: chatImageUrl,
+          eventId: eventId,
+        });
+      } else if (participantCount >= 2) {
+        tempChatList.push({
+          id: chatId,
+          title: chatTitle,
+          sender: lastMessageSenderDisplayName,
+          message: lastMessageText,
+          timestamp: lastMessageTimestamp,
+          image: chatImageUrl,
+          eventId: eventId,
+          hasUnread: false,
+        });
+      }
+    });
+
+    // Sort regular chats by timestamp
+    tempChatList.sort((a, b) => {
+      const tsA = a.timestamp ? a.timestamp.toMillis() : 0;
+      const tsB = b.timestamp ? b.timestamp.toMillis() : 0;
+      return tsB - tsA;
+    });
+
+    setNewMatchEvents(tempNewMatchEvents);
+    setChatList(tempChatList);
+    setLoading(false); // Set loading to false only after all data is processed
+  }, (error) => {
+    console.error("ChatScreen: Error listening to chats (outer snapshot error):", error);
+    setLoading(false); // Also set loading to false on error
+  });
+
+  return () => unsubscribeChats();
+}, [currentUserId]);
 
   const handleChatPress = (chatId, chatTitle, eventId) => {
     navigation.navigate('ChatDetail', { chatId, chatTitle, eventId });

@@ -60,7 +60,8 @@
     "react-native-web": "^0.20.0",
     "tailwind-rn": "^4.2.0",
     "expo-notifications": "~0.31.3",
-    "expo-blur": "~14.1.5"
+    "expo-blur": "~14.1.5",
+    "@react-native-masked-view/masked-view": "0.3.2"
   },
   "devDependencies": {
     "@babel/core": "latest",

@@ -289,17 +289,13 @@ const ChatDetailScreen = ({ route, navigation }) => {
   // This means `lastReadTimestamp` will no longer be updated.
 
   // Scroll to bottom when messages update (initial load or new messages sent)
-  useEffect(() => {
-    // This effect ensures the FlatList scrolls to the visual bottom (latest messages)
-    // whenever the messages array updates and there are messages to display.
+    useEffect(() => {
     if (flatListRef.current && messages.length > 0) {
-      // Use a short timeout to ensure layout has updated before scrolling.
-      // This is crucial for FlatList to correctly calculate its scroll position.
-      setTimeout(() => {
+        setTimeout(() => {
         flatListRef.current.scrollToEnd({ animated: true });
-      }, 900);
+        }, 50); // Reduced delay significantly
     }
-  }, [messages]); // Trigger when the messages array changes
+    }, [messages]);
 
   // Send Message Function
   const handleSendMessage = async () => {

@@ -11,6 +11,7 @@ import {
   Dimensions,
   Platform,
   StatusBar,
+  Image, // Import Image component
 } from 'react-native';
 import { db, auth } from '../firebase'; // Assuming correct path to firebase config
 import {
@@ -28,7 +29,6 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { LinearGradient } from 'expo-linear-gradient';
-import MaskedView from '@react-native-community/masked-view'; // Import MaskedView
 
 import RsvpEventCard from '../components/hub/RsvpEventCard'; // Ensure correct path
 import HostedEventManagementCard from '../components/hub/HostedEventManagementCard'; // Ensure correct path
@@ -406,21 +406,19 @@ const HubScreen = ({ navigation }) => {
 
   return (
     <LinearGradient colors={["#34394C", "#000"]} style={styles.fullScreenContainer}>
+      {/* The ScrollView's style property controls the ScrollView container itself. */}
+      {/* Its contentContainerStyle controls the View that wraps all its children. */}
       <ScrollView contentContainerStyle={styles.scrollViewContentContainer}>
+        {/* THIS IS THE CRUCIAL WRAPPER VIEW for all your content */}
+        {/* It ensures all content stacks from the top and flexGrow handles remaining space. */}
         <View style={styles.contentWrapper}>
-          {/* 'Rauxa Hub' Title with Linear Gradient on Text */}
-          <View style={styles.headerTitleContainer}>
-            <MaskedView
-              style={{ flex: 1, height: 35 }} // Adjust height based on text size
-              maskElement={<Text style={styles.headerTitleMask}>Rauxa Hub</Text>}
-            >
-              <LinearGradient
-                colors={[colors.primary, colors.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={StyleSheet.absoluteFill} // Fills the MaskedView
-              />
-            </MaskedView>
+          {/* Rauxa Hub Image */}
+          <View style={styles.imageContainer}>
+            <Image
+              source={require('../assets/RAUXAHub.png')} // Your image path
+              style={styles.rauxaHubImage}
+              resizeMode="contain" // Ensures the whole image is visible within its bounds
+            />
           </View>
 
           {/* Your RSVPs Section */}
@@ -451,10 +449,12 @@ const HubScreen = ({ navigation }) => {
           />
 
           {/* Your Hosted Events Section */}
+          {/* Apply sectionHeader styles, then add the specific margin for hosted events */}
           <View style={[styles.sectionHeader, styles.hostedEventsSectionHeader]}>
             <Text style={styles.sectionTitleText}>Meetups Your Hosting</Text>
             <Text style={styles.sectionCount}>({hostedEventsWithUsers.length} Events)</Text>
           </View>
+          {/* Render HostedEventManagementCards vertically stacked */}
           <View style={styles.hostedEventsListVertical}>
             {hostedEventsWithUsers.length > 0 ? (
               hostedEventsWithUsers.map((item) => (
@@ -477,6 +477,7 @@ const HubScreen = ({ navigation }) => {
             )}
           </View>
 
+          {/* Final bottom padding - ensures content doesn't get cut off by bottom nav/tabs */}
           <View style={styles.bottomPadding} />
         </View>
       </ScrollView>
@@ -502,9 +503,9 @@ const HubScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   fullScreenContainer: {
-    flex: 1,
+    flex: 1, // Ensures the gradient fills the entire screen
   },
-  loadingContent: {
+  loadingContent: { // For the initial loading state (full screen)
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -514,45 +515,33 @@ const styles = StyleSheet.create({
     marginTop: spacing.small,
     fontSize: 16,
   },
-  scrollViewContentContainer: {
-    flexGrow: 1,
-    backgroundColor: 'transparent',
+  // --- ScrollView and its content container ---
+  scrollViewContentContainer: { // This style is applied to ScrollView's contentContainerStyle
+    flexGrow: 1, // Crucial: Allows the contentWrapper to expand and push empty space to the bottom
+    backgroundColor: 'transparent', // The gradient from fullScreenContainer shows through
+    // No horizontal padding here. Put it on the contentWrapper.
   },
-  contentWrapper: {
+  contentWrapper: { // This is the new wrapper View *inside* the ScrollView
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + spacing.medium : spacing.large * 1.5,
-    paddingHorizontal: spacing.medium,
+    paddingHorizontal: spacing.medium, // Apply overall horizontal padding here to all content
   },
-  // --- Header Title for Gradient Text ---
-  headerTitleContainer: {
-    marginBottom: spacing.large,
-    // Add any padding or alignment for the MaskedView container here if needed
+  // --- Header Image (Rauxa Hub) ---
+  imageContainer: {
+    alignSelf: 'flex-start', // Keeps the image container left-aligned
   },
-  headerTitleMask: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    // The color here doesn't matter for the mask, but size/font are crucial for shaping the mask
-    color: 'black', // MaskedView uses the alpha channel, so 'black' makes it opaque
-    alignSelf: 'flex-start', // Important for the text to take its natural width
-  },
-  // The LinearGradient inside MaskedView will fill this area.
-  // We remove headerTitleGradientContainer
-  headerTitle: {
-    // This style is now applied to the text *inside* the MaskedView,
-    // which serves as the *shape* for the gradient.
-    fontSize: 28,
-    fontWeight: 'bold',
-    // The actual color is irrelevant here as it's being masked by the gradient.
-    // Ensure this text is identical in style to `headerTitleMask`.
-    color: 'transparent', // Set to transparent so the gradient shows through
+  rauxaHubImage: {
+    width: 200, // Adjust width as needed
+    height: 50, // Adjust height as needed
+    // The image itself should handle transparency, so no background gradient needed here.
   },
   // --- Section Headers (Your RSVPs and Your Hosted Events) ---
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginBottom: spacing.small,
+    marginBottom: spacing.small, // Consistent small margin below this header
   },
-  sectionTitleText: {
+  sectionTitleText: { // Renamed to clearly indicate it's a text style
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
@@ -564,13 +553,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   // --- RSVP List (Horizontal FlatList) ---
-  rsvpListContent: {
-    paddingBottom: spacing.medium,
-    minHeight: screenHeight * 0.2,
-    justifyContent: 'center',
+  rsvpListContent: { // FlatList's contentContainerStyle
+    // Optional: minHeight for visual consistency if you want the section to always take up space
+    minHeight: screenHeight * 0.2, // Example: At least 20% of screen height
+    justifyContent: 'center', // Centers content vertically within its minHeight
+    // For horizontal FlatList, the items themselves define the width.
+    // We don't want flex:1 here as it would try to take all available width.
   },
-  emptyListContent: {
-    width: width - (spacing.medium * 2),
+  emptyListContent: { // Style for the ListEmptyComponent of the RSVP FlatList
+    // For a horizontal FlatList's empty component, give it explicit width
+    width: width - (spacing.medium * 2), // Should match the horizontal padding of the parent
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.large,
@@ -582,19 +574,23 @@ const styles = StyleSheet.create({
   },
   // --- Hosted Events Section (Vertical Stack) ---
   hostedEventsSectionHeader: {
-    marginTop: spacing.medium,
+    // This `marginTop` is crucial for the consistent gap *after* the RSVP section
+    marginTop: spacing.medium, // Ensures a 16px gap (our defined spacing.medium)
+    // Inherits other styles from `sectionHeader` due to `[styles.sectionHeader, ...]`
   },
   hostedEventsListVertical: {
-    paddingVertical: spacing.small,
+    // No flexGrow here. Children (HostedEventManagementCards) will stack naturally.
+    paddingVertical: spacing.small, // Add some padding around the list of cards
   },
-  emptyHostedEventsContainer: {
+  emptyHostedEventsContainer: { // Style for the empty state of Hosted Events
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: spacing.large,
   },
   // --- Bottom Padding ---
   bottomPadding: {
-    height: Platform.OS === 'ios' ? 110 : 120,
+    height: Platform.OS === 'ios' ? 110 : 120, // Adjust this based on your bottom navigation bar's height
+                                                // to ensure content scrolls above it.
   },
 });
 
