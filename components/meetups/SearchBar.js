@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
   searchBar: {
     flex: 1,
     borderWidth: 1.5, // Slightly less thick border
-    borderColor: '#FFF', // Matching the filter modal's background gradient start color for harmony
+    borderColor: '#F2BB47', // Changed border color to the accent yellow
     borderRadius: 15, // Slightly less rounded corners to match modal
     backgroundColor: '#333333', // A darker, but not black, background for depth
     color: '#EAEAEA', // Light text color for contrast

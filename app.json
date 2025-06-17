@@ -20,6 +20,9 @@
             "bundleIdentifier": "com.yourcompany.rauxa",
             "googleServicesFile": "./GoogleService-Info.plist",
             "infoPlist": {
+                "NSLocationWhenInUseUsageDescription": "This app uses location services to find events near you.",
+                "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to allow you to select images for your event posts.",
+                "NSPhotoLibraryAddUsageDescription": "This app needs to save photos to your library, for example, to store event images for offline use.",
                 "CFBundleURLTypes": [
                     {
                         "CFBundleURLSchemes": [

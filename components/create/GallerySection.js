@@ -1,171 +1,200 @@
 import React from 'react';
-import { View, ScrollView, TouchableOpacity, Text, Image, StyleSheet, Dimensions, Alert } from 'react-native';
+import { View, ScrollView, TouchableOpacity, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 
-// Dimensions is not used directly for gallery sizing inside the modal,
-// as the screenWidth prop is passed from the parent.
-// const { width } = Dimensions.get('window');
+const GallerySection = ({
+  photos,
+  setPhotos,
+  currentImageIndex,
+  setCurrentImageIndex,
+  screenWidth, // This now represents the width of the parent modal's content area
+  onOpenImagePickerOptions,
+  onOpenImageReorderModal,
+}) => {
+  // Use screenWidth directly for image and container width
+  const imageDisplayWidth = screenWidth; // This will be the content width of the modal itself
 
-const GallerySection = ({ photos, setPhotos, currentImageIndex, setCurrentImageIndex, handlePickImage, setIsPixabayModalVisible, screenWidth, onCloseGallery }) => {
-  // Use the screenWidth prop to calculate the dynamic width for the gallery images
-  const galleryImageWidth = screenWidth - 20; // Account for the margin applied in EventDetailsModal's image style
+  const getEmptyMessage = () => {
+    if (photos.length === 0) return "Add at least 3 photos to showcase your event.";
+    if (photos.length < 3) return `Add ${3 - photos.length} more photo(s).`;
+    return "";
+  };
+
+  const emptyMessage = getEmptyMessage();
+
+  const handleRemovePhoto = (indexToRemove) => {
+    Alert.alert(
+      "Remove Photo",
+      "Are you sure you want to remove this photo?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          onPress: () => {
+            const newPhotos = photos.filter((_, i) => i !== indexToRemove);
+            setPhotos(newPhotos);
+            if (newPhotos.length === 0) {
+              setCurrentImageIndex(0);
+            } else if (indexToRemove === currentImageIndex) {
+              setCurrentImageIndex(Math.max(0, indexToRemove - 1));
+            } else if (indexToRemove < currentImageIndex) {
+              setCurrentImageIndex(currentImageIndex - 1);
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
+  };
 
   return (
     <>
-      <View style={[styles.galleryContainer, { width: screenWidth }]}> {/* Use screenWidth for container width */}
+      <View style={[styles.galleryContainer, { width: imageDisplayWidth }]}>
         <ScrollView
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={(event) => {
-            // Use galleryImageWidth for calculation to ensure correct pagination
-            const index = Math.floor(event.nativeEvent.contentOffset.x / galleryImageWidth);
+            const index = Math.round(event.nativeEvent.contentOffset.x / imageDisplayWidth);
             setCurrentImageIndex(index);
           }}
           scrollEventThrottle={16}
+          onMomentumScrollEnd={(event) => {
+            const index = Math.round(event.nativeEvent.contentOffset.x / imageDisplayWidth);
+            setCurrentImageIndex(index);
+          }}
         >
-          {photos.map((uri, index) => (
-            <View key={index} style={[styles.imageWrapper, { width: galleryImageWidth }]}> {/* Apply dynamic width */}
-              <Image source={{ uri }} style={styles.image} />
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => {
-                  const newPhotos = [...photos];
-                  newPhotos.splice(index, 1);
-                  setPhotos(newPhotos);
-                  if (currentImageIndex >= newPhotos.length && newPhotos.length > 0) {
-                    setCurrentImageIndex(newPhotos.length - 1);
-                  } else if (newPhotos.length === 0) {
-                    setCurrentImageIndex(0);
-                  }
-                }}
-              >
-                <Ionicons name="close-circle" size={28} color="#fff" />
-              </TouchableOpacity>
+          {photos.length === 0 ? (
+            <View style={[styles.emptyImagePlaceholder, { width: imageDisplayWidth }]}>
+              <Ionicons name="images-outline" size={80} color="#888" />
+              <Text style={styles.emptyImageText}>{emptyMessage}</Text>
             </View>
-          ))}
+          ) : (
+            photos.map((uri, index) => (
+              <View key={uri + index} style={[styles.imageWrapper, { width: imageDisplayWidth }]}>
+                <Image
+                  source={{ uri }}
+                  style={styles.image}
+                  placeholderContent={<ActivityIndicator size="small" color="#F2BB47" />}
+                  contentFit="cover"
+                  transition={300}
+                />
+                <TouchableOpacity
+                  style={styles.removeButton}
+                  onPress={() => handleRemovePhoto(index)}
+                >
+                  <Ionicons name="close-circle" size={32} color="#D9043D" />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </ScrollView>
 
-        {/* Close Button positioned at top-left of the gallery container */}
-        <TouchableOpacity style={styles.closeButtonGallery} onPress={onCloseGallery}>
-          <Ionicons name="close-circle" size={40} color="white" />
-        </TouchableOpacity>
-
-        <View style={styles.paginationDotsContainer}>
-          {photos.map((_, i) => (
-            <View
-              key={i}
-              style={[styles.indicator, currentImageIndex === i && styles.activeIndicator]}
-            />
-          ))}
-        </View>
+        {photos.length > 0 && (
+          <View style={styles.paginationDotsContainer}>
+            {photos.map((_, i) => (
+              <View
+                key={i}
+                style={[styles.indicator, currentImageIndex === i && styles.activeIndicator]}
+              />
+            ))}
+          </View>
+        )}
       </View>
 
-      <View style={styles.thumbnailAndButtonsContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbnailsScroll}>
-          {photos.map((uri, index) => (
-            <View key={index} style={styles.thumbnailWrapper}>
-              <Image source={{ uri }} style={styles.thumbnail} />
-
-              {index > 0 && (
-                <TouchableOpacity
-                  style={[styles.arrowButton, styles.leftArrow]}
-                  onPress={() => {
-                    const newPhotos = [...photos];
-                    [newPhotos[index - 1], newPhotos[index]] = [newPhotos[index], newPhotos[index - 1]];
-                    setPhotos(newPhotos);
-                    setCurrentImageIndex(index - 1);
-                  }}
-                >
-                  <Ionicons name="arrow-back-circle" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-
-              {index < photos.length - 1 && (
-                <TouchableOpacity
-                  style={[styles.arrowButton, styles.rightArrow]}
-                  onPress={() => {
-                    const newPhotos = [...photos];
-                    [newPhotos[index], newPhotos[index + 1]] = [newPhotos[index + 1], newPhotos[index]];
-                    setPhotos(newPhotos);
-                    setCurrentImageIndex(index + 1);
-                  }}
-                >
-                  <Ionicons name="arrow-forward-circle" size={18} color="#fff" />
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                onPress={() => setCurrentImageIndex(index)}
-                style={[
-                  styles.thumbnailTouchable,
-                  currentImageIndex === index && styles.activeThumbnailBorder,
-                  { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-                ]}
-              />
-            </View>
-          ))}
-        </ScrollView>
-
-        <View style={styles.iconButtonsRow}>
-          <TouchableOpacity style={styles.iconButton} onPress={handlePickImage}>
-            <Ionicons name="cloud-upload-outline" size={28} color="#fff" />
-            <Text style={styles.iconButtonText}>Upload</Text>
-          </TouchableOpacity>
-
+      {/* The bottomButtonsContainer now directly follows the gallery and holds the action buttons */}
+      <View style={[styles.bottomButtonsContainer, { width: imageDisplayWidth }]}>
+        <View style={styles.actionButtonsRow}>
           <TouchableOpacity
-            style={styles.iconButton}
-            onPress={() => {
-              if (photos.length >= 3) {
-                  Alert.alert("Photo Limit", "You can only add a maximum of 3 photos.");
-                  return;
-              }
-              setIsPixabayModalVisible(true);
-            }}
+            style={styles.actionButton}
+            onPress={onOpenImagePickerOptions}
           >
-            <Ionicons name="images-outline" size={28} color="#fff" />
-            <Text style={styles.iconButtonText}>Pixabay</Text>
+            <Ionicons name="add-circle-outline" size={28} color="#fff" />
+            <Text style={styles.actionButtonText}>Add Photo</Text>
           </TouchableOpacity>
+
+          {photos.length > 1 && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={onOpenImageReorderModal}
+            >
+              <Ionicons name="swap-vertical-outline" size={28} color="#fff" />
+              <Text style={styles.actionButtonText}>Reorder</Text>
+            </TouchableOpacity>
+          )}
+
+          {photos.length > 0 && (
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={() => Alert.alert(
+                  "Remove All Photos",
+                  "Are you sure you want to remove all photos?",
+                  [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Remove All", onPress: () => { setPhotos([]); setCurrentImageIndex(0); }, style: "destructive" }
+                  ]
+              )}
+          >
+              <Ionicons name="trash-outline" size={28} color="#D9043D" />
+              <Text style={[styles.actionButtonText, { color: '#D9043D' }]}>Remove All</Text>
+          </TouchableOpacity>
+          )}
         </View>
+        {emptyMessage.length > 0 && photos.length > 0 && (
+          <Text style={styles.requirementText}>{emptyMessage}</Text>
+        )}
       </View>
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  // New style for the close button within the gallery
-  closeButtonGallery: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 2,
-    zIndex: 11,
-  },
   galleryContainer: {
-    // Height is now 250, matching EventDetailsModal
     height: 250,
     position: 'relative',
-    borderRadius: 15, // Added borderRadius for consistency with EventDetailsModal gallery
-    overflow: 'hidden', // Added overflow for consistency with EventDetailsModal gallery
-    marginHorizontal: 0, // Removed marginHorizontal as it's handled by image width
+    borderTopLeftRadius: 15, // Only top-left rounded
+    borderTopRightRadius: 15, // Only top-right rounded
+    borderBottomLeftRadius: 0, // No rounding on bottom-left
+    borderBottomRightRadius: 0, // No rounding on bottom-right
+    overflow: 'hidden',
+    marginTop: 20, // Retain top margin
+    marginBottom: 0, // Removed bottom margin to connect to the next container
+    alignSelf: 'center',
+    backgroundColor: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  emptyImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#2C2C47',
+    height: '100%',
+    borderRadius: 15, // Keep internal placeholder rounded if desired
+    paddingHorizontal: 20,
+  },
+  emptyImageText: {
+    color: '#ccc',
+    marginTop: 15,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   imageWrapper: {
-    // Width is now set dynamically by `galleryImageWidth`
-    // Height is now 250, matching EventDetailsModal
-    height: 250,
+    height: '100%',
     position: 'relative',
   },
   image: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
-    borderRadius: 15, // Changed to 15 to match EventDetailsModal
+    // The image itself will respect the parent's border radius
   },
   removeButton: {
     position: 'absolute',
-    bottom: 10,
+    top: 10,
     right: 10,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: 20,
@@ -186,68 +215,54 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginHorizontal: 4,
-    backgroundColor: '#666',
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   activeIndicator: {
     backgroundColor: '#F2BB47',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  thumbnailAndButtonsContainer: {
+  bottomButtonsContainer: {
+    backgroundColor: '#000', // Black background
+    borderBottomLeftRadius: 15,
+    borderBottomRightRadius: 15,
+    borderTopLeftRadius: 0, // Ensure no top rounding
+    borderTopRightRadius: 0, // Ensure no top rounding
+    paddingBottom: 15,
+    marginTop: 0, // Important: removed negative margin to be flush
+    alignSelf: 'center',
+    paddingHorizontal: 0,
+  },
+  actionButtonsRow: {
     flexDirection: 'row',
-    backgroundColor: '#730220',
-    paddingVertical: 8,
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    // The borderTop is fine as it acts as a separator line within the black container
+    // No marginTop here as it's directly in the container with marginTop: 0
+    paddingHorizontal: 15,
+  },
+  actionButton: {
+    alignItems: 'center',
+    paddingVertical: 5,
     paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  thumbnailsScroll: {
-    flexGrow: 0,
-    flex: 1,
-  },
-  thumbnailTouchable: {
-    marginHorizontal: 4,
-    borderRadius: 8,
-  },
-  activeThumbnailBorder: {
-    borderWidth: 2,
-    borderColor: '#F2BB47',
-  },
-  thumbnailWrapper: {
-    position: 'relative',
-    marginHorizontal: 4,
-  },
-  thumbnail: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    resizeMode: 'cover',
-    backgroundColor: '#000',
-  },
-  arrowButton: {
-    position: 'absolute',
-    top: '50%',
-    marginTop: -10,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 12,
-    padding: 2,
-  },
-  leftArrow: {
-    left: 2,
-  },
-  rightArrow: {
-    right: 2,
-  },
-  iconButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 10,
-  },
-  iconButton: {
-    alignItems: 'center',
-    marginHorizontal: 8,
-  },
-  iconButtonText: {
+  actionButtonText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 13,
+    marginTop: 5,
+    fontWeight: '600',
+  },
+  requirementText: {
+    color: '#F2BB47',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 10,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
 });
 

@@ -1,13 +1,12 @@
-// components/chat/ChatDetailScreen.js
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
-  Text,
+  Text, // Ensure Text is imported
   TouchableOpacity,
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView,
+  SafeAreaView, // Though safeArea styles are present, SafeAreaView itself isn't used as the main container
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -22,7 +21,7 @@ import {
   addDoc,
   doc,
   getDoc,
-  updateDoc, // <-- Ensure updateDoc is imported
+  updateDoc,
   serverTimestamp,
   getDocs,
 } from "firebase/firestore";
@@ -33,9 +32,7 @@ import MessageInput from "../components/chat/MessageInput";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-// Import the ParticipantsDropdown component
 import ParticipantsDropdown from '../components/chat/ParticipantsDropdown';
-// Import EventDetailsOverlay
 import EventDetailsOverlay from '../components/chat/EventDetailsOverlay';
 
 const MESSAGES_PER_LOAD = 20;
@@ -110,12 +107,12 @@ const ChatDetailScreen = ({ route, navigation }) => {
         console.error("Error fetching chat for isNewMatch check:", error);
       });
     }
-  }, [chatId, currentUserId]); // Depend on chatId and currentUserId
+  }, [chatId, currentUserId]);
 
 
   // Fetch Chat Details, Participant Info, and Event Header Image/Name
   useEffect(() => {
-    if (!currentUserId || !chatId) return; // Only fetch if user and chat ID are available
+    if (!currentUserId || !chatId) return;
 
     const fetchData = async () => {
       try {
@@ -129,20 +126,17 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
           // --- START FIX ---
           // Manually add an entry for the "system" sender (Rauxa Admin)
-          // This ensures that system messages have a defined profile picture and display name.
           fetchedInfo["system"] = {
             id: "system",
             displayName: "Rauxa Admin",
             firstName: "Rauxa",
             lastName: "Admin",
-            // Ensure this path is correct relative to your ChatDetailScreen.js file
-            profileImage: require('../assets/onboarding/Onboarding1.png'),
+            profileImage: require('../assets/onboarding/Onboarding1.png'), // Corrected path
           };
           // --- END FIX ---
 
           // Fetch profile info for each participant
           for (const pId of participantIds) {
-            // Only fetch if not already explicitly added (like "system" was)
             if (!fetchedInfo[pId]) {
               const profileRef = doc(db, "users", pId, "ProfileInfo", "userinfo");
               const profileSnap = await getDoc(profileRef);
@@ -158,13 +152,12 @@ const ChatDetailScreen = ({ route, navigation }) => {
                   profileImage: profileData.profileImages?.[0] || null,
                 };
               } else {
-                // Fallback for user profiles not found, if ever needed
                 fetchedInfo[pId] = {
                   id: pId,
                   displayName: `User ${pId.substring(0, 4)}...`,
                   firstName: `User`,
                   lastName: `${pId.substring(0, 4)}...`,
-                  profileImage: null, // Generic fallback if no specific image is desired
+                  profileImage: null,
                 };
               }
             }
@@ -173,14 +166,13 @@ const ChatDetailScreen = ({ route, navigation }) => {
           console.log("ChatDetailScreen: Fetched participants info:", fetchedInfo);
 
           const eventId = chatData.eventId || initialEventId;
-          setChatEventId(eventId); // Store eventId in state for potential use in overlay
+          setChatEventId(eventId);
           if (eventId) {
             const eventRef = doc(db, "live", eventId);
             const eventSnap = await getDoc(eventRef);
             if (eventSnap.exists()) {
               const eventData = eventSnap.data();
-              setFetchedEventData(eventData); // Store eventData
-              // Use eventData.title as requested for the header
+              setFetchedEventData(eventData);
               setHeaderEventName(eventData.title || `Event ${eventId.substring(0, 4)}...`);
               if (eventData.photos && eventData.photos.length > 0) {
                 setEventHeaderImageUrl(eventData.photos[0]);
@@ -188,12 +180,11 @@ const ChatDetailScreen = ({ route, navigation }) => {
             } else {
               console.warn(`Event ${eventId} not found for chat ${chatId}.`);
               setHeaderEventName("Event Not Found");
-              setFetchedEventData(null); // Clear if not found
+              setFetchedEventData(null);
             }
           } else {
-            // Fallback for direct chats or chats without an associated event
             setHeaderEventName(chatData.name || "Direct Chat");
-            setFetchedEventData(null); // Clear if no event ID
+            setFetchedEventData(null);
           }
 
         } else {
@@ -219,7 +210,7 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
     const initialMessagesQuery = query(
       collection(db, "chats", chatId, "messages"),
-      orderBy("timestamp", "asc"), // Order by OLDEST first
+      orderBy("timestamp", "asc"),
       limit(MESSAGES_PER_LOAD),
     );
 
@@ -233,19 +224,15 @@ const ChatDetailScreen = ({ route, navigation }) => {
       setLastMessageSnapshot(snapshot.docs[snapshot.docs.length - 1]);
       setAllMessagesLoaded(snapshot.docs.length < MESSAGES_PER_LOAD);
 
-      // Messages are now ordered ascending (oldest to newest) from Firestore.
-      // With `inverted={true}` on FlatList, this means newer messages will be at the bottom (visually).
       setMessages(fetchedMessages);
     }, (error) => {
       console.error("ChatDetailScreen: Error listening to initial messages:", error);
     });
 
-    return () => unsubscribe(); // Cleanup subscription on unmount
+    return () => unsubscribe();
   }, [currentUserId, chatId]);
 
-  // Function to load more (older) messages when scrolling up
   const loadMoreMessages = async () => {
-    // Prevent loading more if already loading, all messages loaded, or no more older messages to fetch
     if (loadingMore || allMessagesLoaded || !lastMessageSnapshot || !chatId) {
       return;
     }
@@ -255,8 +242,8 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
     const moreMessagesQuery = query(
       collection(db, "chats", chatId, "messages"),
-      orderBy("timestamp", "asc"), // Order by OLDEST first
-      startAfter(lastMessageSnapshot), // Start after the oldest message currently displayed
+      orderBy("timestamp", "asc"),
+      startAfter(lastMessageSnapshot),
       limit(MESSAGES_PER_LOAD),
     );
 
@@ -268,12 +255,10 @@ const ChatDetailScreen = ({ route, navigation }) => {
       }));
 
       if (newMessages.length === 0) {
-        setAllMessagesLoaded(true); // No more older messages available
+        setAllMessagesLoaded(true);
         console.log("ChatDetailScreen: All older messages loaded.");
       } else {
-        setLastMessageSnapshot(snapshot.docs[snapshot.docs.length - 1]); // Update the last snapshot for next load
-        // Prepend newly loaded OLDER messages to the existing list (which is oldest to newest)
-        // This maintains the correct visual order for an inverted list when scrolling up.
+        setLastMessageSnapshot(snapshot.docs[snapshot.docs.length - 1]);
         setMessages((prevMessages) => [...newMessages, ...prevMessages]);
         console.log(`ChatDetailScreen: Loaded ${newMessages.length} more messages.`);
       }
@@ -284,23 +269,17 @@ const ChatDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  // --- READ RECEIPT LOGIC REMOVED ---
-  // The useEffect responsible for writing read receipts is removed.
-  // This means `lastReadTimestamp` will no longer be updated.
-
-  // Scroll to bottom when messages update (initial load or new messages sent)
-    useEffect(() => {
+  useEffect(() => {
     if (flatListRef.current && messages.length > 0) {
-        setTimeout(() => {
+      setTimeout(() => {
         flatListRef.current.scrollToEnd({ animated: true });
-        }, 50); // Reduced delay significantly
+      }, 50);
     }
-    }, [messages]);
+  }, [messages]);
 
-  // Send Message Function
   const handleSendMessage = async () => {
     if (newMessageText.trim() === "" || !currentUserId || !chatId) {
-      return; // Do not send empty messages or if user/chat info is missing
+      return;
     }
 
     try {
@@ -308,11 +287,10 @@ const ChatDetailScreen = ({ route, navigation }) => {
       await addDoc(messagesCollectionRef, {
         senderId: currentUserId,
         text: newMessageText,
-        timestamp: serverTimestamp(), // Use server timestamp for consistency
-        type: "user", // Or other types like "system", "event", etc.
+        timestamp: serverTimestamp(),
+        type: "user",
       });
 
-      // Update the chat document with the last message info for chat list display
       const chatDocRef = doc(db, "chats", chatId);
       await updateDoc(chatDocRef, {
         lastMessage: {
@@ -323,25 +301,19 @@ const ChatDetailScreen = ({ route, navigation }) => {
         lastMessageTimestamp: serverTimestamp(),
       });
 
-      setNewMessageText(""); // Clear input field after sending
+      setNewMessageText("");
       console.log("Message sent and chat updated.");
-      // The `useEffect` above will automatically handle scrolling to the end
-      // as the `messages` state updates with the new message from the `onSnapshot` listener.
     } catch (error) {
       console.error("Error sending message:", error);
     }
   };
 
-  // Function to handle Quick Create / Modify Event (placeholder for actual navigation)
   const handleOpenCreateMeetupModal = (type, eventData) => {
     console.log(`Attempting to open Create Meetup Modal for type: ${type}`);
     console.log("Event Data:", eventData);
-    // You would typically navigate to a specific screen here
     navigation.navigate('CreateMeetupScreen', { type, eventData });
   };
 
-
-  // Show loading indicator if data is still being fetched or chat ID is missing
   if (loading || !chatId) {
     return (
       <LinearGradient colors={["#0367A6", "#003f6b"]} style={styles.container}>
@@ -351,110 +323,103 @@ const ChatDetailScreen = ({ route, navigation }) => {
   }
 
   return (
-      <LinearGradient
-        colors={["#0367A6", "#003f6b"]}
-        // Apply paddingBottom from insets to push content above device's system navigation/tab bar
-        style={[styles.container, { paddingBottom: insets.bottom + 10 }]}
-      >
-        {/* Chat Header */}
-        <View style={styles.header}>
-          {/* Back button to navigate out of the chat */}
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#FFD700" />
-          </TouchableOpacity>
-          {/* Display event image if available */}
-          {eventHeaderImageUrl && (
-            <Image
-              source={{ uri: eventHeaderImageUrl }}
-              style={styles.headerImage}
-              contentFit="cover"
-            />
-          )}
-          {/* Display event name/chat title */}
-          <Text style={styles.headerTitle}>{headerEventName}</Text>
-          {/* Information Icon to open event details overlay */}
-          <TouchableOpacity
-            onPress={() => setIsEventDetailsOverlayVisible(true)}
-            style={styles.infoButton}
-          >
-            <Ionicons name="information-circle" size={28} color="#FFD700" />
-          </TouchableOpacity>
-          {/* Participants Icon to toggle dropdown visibility */}
-          <TouchableOpacity
-            onPress={() => setIsParticipantsDropdownVisible(!isParticipantsDropdownVisible)}
-            style={styles.participantsButton}
-          >
-            <Ionicons name="people" size={28} color="#FFD700" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Messages List */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <MessageBubble
-              message={item}
-              currentUserId={currentUserId}
-              participantsInfo={participantsInfo}
-            />
-          )}
-          style={styles.messagesList}
-          contentContainerStyle={styles.messagesContentContainer}
-          onEndReached={loadMoreMessages} // Triggered when scrolling towards the (visual) top
-          onEndReachedThreshold={0.5} // When 50% of the content from the end is reached
-          // ListHeaderComponent for inverted list appears at the visual TOP (oldest messages)
-          ListHeaderComponent={allMessagesLoaded && messages.length > 0 && !loadingMore ?
-            (<Text style={styles.allMessagesLoadedText}>
-              Groupchat Started for {fetchedEventData?.title || 'this Event'}
-            </Text>) : null
-          }
-          // ListFooterComponent for inverted list appears at the visual BOTTOM (newest messages)
-          ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color="#FFD700" style={{ marginVertical: 10 }} /> : null}
-          // Essential for displaying latest messages at the bottom
-          showsVerticalScrollIndicator={false} // Hides the scrollbar
-        />
-
-        {/* Message Input Component */}
-        <MessageInput
-          value={newMessageText}
-          onChangeText={setNewMessageText}
-          onSendMessage={handleSendMessage}
-        />
-
-        {/* Participants Dropdown as a View, positioned absolutely */}
-        {isParticipantsDropdownVisible && (
-          <View style={styles.dropdownPosition}>
-            <ParticipantsDropdown
-              onClose={() => setIsParticipantsDropdownVisible(false)}
-              participants={Object.values(participantsInfo)}
-            />
-          </View>
+    <LinearGradient
+      colors={["#0367A6", "#003f6b"]}
+      style={[styles.container, { paddingBottom: insets.bottom + 10 }]}
+    >
+      {/* Chat Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFD700" />
+        </TouchableOpacity>
+        {eventHeaderImageUrl && (
+          <Image
+            source={{ uri: eventHeaderImageUrl }}
+            style={styles.headerImage}
+            contentFit="cover"
+          />
         )}
+        <Text style={styles.headerTitle}>{headerEventName}</Text> {/* This is correctly wrapped */}
+        <TouchableOpacity
+          onPress={() => setIsEventDetailsOverlayVisible(true)}
+          style={styles.infoButton}
+        >
+          <Ionicons name="information-circle" size={28} color="#FFD700" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setIsParticipantsDropdownVisible(!isParticipantsDropdownVisible)}
+          style={styles.participantsButton}
+        >
+          <Ionicons name="people" size={28} color="#FFD700" />
+        </TouchableOpacity>
+      </View>
 
-        {/* Event Details Overlay (conditionally rendered) */}
+      {/* Messages List */}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          // IMPORTANT: MessageBubble must ensure all its internal text is wrapped in <Text>
+          <MessageBubble
+            message={item}
+            currentUserId={currentUserId}
+            participantsInfo={participantsInfo}
+          />
+        )}
+        style={styles.messagesList}
+        contentContainerStyle={styles.messagesContentContainer}
+        onEndReached={loadMoreMessages}
+        onEndReachedThreshold={0.5}
+        ListHeaderComponent={allMessagesLoaded && messages.length > 0 && !loadingMore ?
+          (<Text style={styles.allMessagesLoadedText}>
+            Groupchat Started for {fetchedEventData?.title || 'this Event'}
+          </Text>) : null
+        }
+        ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color="#FFD700" style={{ marginVertical: 10 }} /> : null}
+        showsVerticalScrollIndicator={false}
+      />
+
+      {/* Message Input Component */}
+      {/* IMPORTANT: MessageInput component must ensure any text it displays (e.g., placeholder, button text) is wrapped in <Text> */}
+      <MessageInput
+        value={newMessageText}
+        onChangeText={setNewMessageText}
+        onSendMessage={handleSendMessage}
+      />
+
+      {/* Participants Dropdown as a View, positioned absolutely */}
+      {isParticipantsDropdownVisible && (
+        <View style={styles.dropdownPosition}>
+          {/* IMPORTANT: ParticipantsDropdown must ensure all its internal text is wrapped in <Text> */}
+          <ParticipantsDropdown
+            onClose={() => setIsParticipantsDropdownVisible(false)}
+            participants={Object.values(participantsInfo)}
+          />
+        </View>
+      )}
+
+      {/* Event Details Overlay (conditionally rendered) */}
       {isEventDetailsOverlayVisible && chatEventId && (
+        // IMPORTANT: EventDetailsOverlay must ensure all its internal text is wrapped in <Text>
         <EventDetailsOverlay
-          eventId={chatEventId} // Pass the eventId to fetch details
-          onClose={() => setIsEventDetailsOverlayVisible(false)} // Function to close the overlay
-          onOpenCreateMeetupModal={handleOpenCreateMeetupModal} // Callback for actions within the overlay
+          eventId={chatEventId}
+          onClose={() => setIsEventDetailsOverlayVisible(false)}
+          onOpenCreateMeetupModal={handleOpenCreateMeetupModal}
         />
       )}
-      </LinearGradient>
-
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0367A6', // Background color for the safe area
+    backgroundColor: '#0367A6',
   },
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    // Dynamic paddingTop to account for status bar and header (if not using react-navigation header)
     paddingTop: Platform.OS === 'android' ? 30 : 40,
   },
   loadingText: {
@@ -484,7 +449,7 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     padding: 8,
-    marginLeft: 'auto', // Pushes this button and subsequent ones to the right
+    marginLeft: 'auto',
     marginRight: 5,
   },
   participantsButton: {
@@ -494,15 +459,15 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-    flex: 1, // Allows title to take available space
-    textAlign: 'left', // Aligns title to the left
+    flex: 1,
+    textAlign: 'left',
   },
   messagesList: {
-    flex: 1, // Allows FlatList to take remaining vertical space
+    flex: 1,
   },
   messagesContentContainer: {
-    paddingBottom: 10, // Padding at the visual bottom (newest messages)
-    paddingTop: 10,     // Padding at the visual top (oldest messages)
+    paddingBottom: 10,
+    paddingTop: 10,
   },
   allMessagesLoadedText: {
     color: '#a0aec0',
@@ -512,9 +477,9 @@ const styles = StyleSheet.create({
   },
   dropdownPosition: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? 90 : 110, // Adjust position based on header height
+    top: Platform.OS === 'android' ? 90 : 110,
     right: 16,
-    zIndex: 1000, // Ensure dropdown appears on top
+    zIndex: 1000,
   },
 });
 

@@ -1,47 +1,6 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-// FieldButton sub-component (defined within FieldsSection to keep it cohesive)
-const FieldButton = ({ label, value, onPress, iconName, isLocationField = false, handleOpenLocation, customStyles }) => (
-  <TouchableOpacity style={[styles.fieldButton, customStyles]} onPress={onPress}>
-    <View style={styles.fieldButtonContent}>
-      <Ionicons name={iconName} size={24} color="#fff" style={styles.fieldIcon} />
-      <View style={styles.fieldLabelValue}>
-        <Text style={styles.fieldLabel}>{label}</Text>
-        <Text style={styles.fieldValue}>
-          {value || `Tap to enter ${label.toLowerCase()}`}
-        </Text>
-      </View>
-      {isLocationField && value ? (
-        <TouchableOpacity onPress={handleOpenLocation} style={styles.mapIcon}>
-          <Ionicons name="map-outline" size={24} color="#F2BB47" />
-        </TouchableOpacity>
-      ) : null}
-    </View>
-    <View style={styles.fieldDivider} />
-  </TouchableOpacity>
-);
-
-// New component for Date and Time in a row
-const DateTimeFieldRow = ({ selectedDate, openEditModal, formatDateForDisplay, formatTimeForDisplay }) => (
-  <View style={styles.dateTimeRow}>
-    <FieldButton
-      label="Date"
-      value={formatDateForDisplay(selectedDate)}
-      onPress={() => openEditModal('date', selectedDate, 'Select Date')}
-      iconName="calendar-outline"
-      customStyles={styles.dateTimeFieldButton} // Apply specific style for width
-    />
-    <FieldButton
-      label="Time"
-      value={formatTimeForDisplay(selectedDate)}
-      onPress={() => openEditModal('time', selectedDate, 'Select Time')}
-      iconName="time-outline"
-      customStyles={styles.dateTimeFieldButton} // Apply specific style for width
-    />
-  </View>
-);
 
 const FieldsSection = ({
   title,
@@ -49,112 +8,156 @@ const FieldsSection = ({
   groupSize,
   location,
   description,
-  tags, // <--- NEW: Pass tags here
+  tags,
   openEditModal,
   formatDateForDisplay,
   formatTimeForDisplay,
   handleOpenLocation,
-  onOpenTagsModal // <--- NEW: Callback for opening tags modal
+  onOpenTagsModal,
 }) => {
+  const EDIT_ICON_NAME = "ellipsis-horizontal-circle-outline";
+
+  const renderField = (label, value, fieldKey, iconName, isLocation = false, action = null) => (
+    <TouchableOpacity
+      style={styles.clickableFieldWrapper}
+      onPress={() => action ? action() : openEditModal(fieldKey, value, `Edit ${label}`)}
+    >
+      <Ionicons name={iconName} size={24} color="#F2BB47" style={styles.fieldIcon} />
+      <View style={styles.fieldContent}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <Text style={styles.fieldValue}>{value || `Set ${label}`}</Text>
+      </View>
+      {isLocation && value ? (
+        <TouchableOpacity style={styles.mapButton} onPress={handleOpenLocation}>
+          <Ionicons name="map" size={22} color="#F2BB47" />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.editIconContainer}>
+          <Ionicons name={EDIT_ICON_NAME} size={24} color="#F2BB47" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={styles.fieldsContainer}>
-      <FieldButton
-        label="Event Title"
-        value={title}
-        onPress={() => openEditModal('title', title, 'Edit Event Title')}
-        iconName="chatbubble-ellipses-outline"
-      />
+    <View style={styles.container}>
+      <Text style={styles.sectionTitle}>Edit Event Details</Text>
 
-      {/* New Date and Time Row Component */}
-      <DateTimeFieldRow
-        selectedDate={selectedDate}
-        openEditModal={openEditModal}
-        formatDateForDisplay={formatDateForDisplay}
-        formatTimeForDisplay={formatTimeForDisplay}
-      />
+      {renderField('Title', title, 'title', 'bookmark-outline')}
+      {renderField('Date', formatDateForDisplay(selectedDate), 'date', 'calendar-outline')}
+      {renderField('Time', formatTimeForDisplay(selectedDate), 'time', 'time-outline')}
+      {renderField('Group Size', groupSize, 'groupSize', 'people-outline')}
+      {renderField('Location', location, 'location', 'location-outline', true)}
 
-      <FieldButton
-        label="Group Size"
-        value={groupSize}
-        onPress={() => openEditModal('groupSize', groupSize, 'Set Group Size')}
-        iconName="people-outline"
-      />
-      <FieldButton
-        label="Location"
-        value={location}
-        onPress={() => openEditModal('location', location, 'Set Location')}
-        iconName="location-outline"
-        isLocationField={true}
-        handleOpenLocation={handleOpenLocation}
-      />
-      {/* <--- NEW: Tags Field Button */}
-      <FieldButton
-        label="Tags"
-        value={tags && tags.length > 0 ? tags.join(', ') : 'Select event tags'}
-        onPress={onOpenTagsModal} // Open tags modal
-        iconName="pricetag-outline"
-      />
-      <FieldButton
-        label="Description"
-        value={description}
+      <TouchableOpacity
+        style={styles.clickableFieldWrapper}
+        onPress={onOpenTagsModal}
+      >
+        <Ionicons name="pricetag-outline" size={24} color="#F2BB47" style={styles.fieldIcon} />
+        <View style={styles.fieldContent}>
+          <Text style={styles.fieldLabel}>Tags</Text>
+          <Text style={styles.fieldValue}>
+            {tags.length > 0 ? tags.join(', ') : 'Add Tags'}
+          </Text>
+        </View>
+        <View style={styles.editIconContainer}>
+          <Ionicons name={EDIT_ICON_NAME} size={24} color="#F2BB47" />
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.clickableFieldWrapper, styles.descriptionWrapper]}
         onPress={() => openEditModal('description', description, 'Edit Description')}
-        iconName="information-circle-outline"
-      />
+      >
+        <Ionicons name="document-text-outline" size={24} color="#F2BB47" style={styles.fieldIcon} />
+        <View style={styles.fieldContent}>
+          <Text style={styles.fieldLabel}>Description</Text>
+          <Text style={styles.descriptionValue}>{description || 'Add a description...'}</Text>
+        </View>
+        <View style={styles.editIconContainer}>
+          <Ionicons name={EDIT_ICON_NAME} size={24} color="#F2BB47" />
+        </View>
+      </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  fieldsContainer: {
-    marginHorizontal: 20,
+  container: {
     marginTop: 20,
+    backgroundColor: '#000', // Solid black background for the entire section
+    borderRadius: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 15, // Added horizontal padding here
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
   },
-  fieldButton: {
-    paddingVertical: 10,
+  sectionTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  fieldButtonContent: {
+  clickableFieldWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 5,
+    backgroundColor: '#34394C', // The specified dark blue/grey color
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 4,
   },
   fieldIcon: {
     marginRight: 10,
   },
-  fieldLabelValue: {
+  fieldContent: {
     flex: 1,
   },
   fieldLabel: {
-    color: '#fff',
-    fontSize: 14,
-    opacity: 0.7,
+    fontSize: 13,
+    color: '#ccc',
+    marginBottom: 2,
+  },
+  fieldValueContainer: {
+    // Not directly used as TouchableOpacity is the wrapper
   },
   fieldValue: {
+    fontSize: 16,
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 2,
+    fontWeight: '600',
   },
-  fieldDivider: {
-    height: 1,
-    backgroundColor: '#fff',
-    opacity: 0.3,
-    marginTop: 5,
-    marginBottom: 10,
+  descriptionWrapper: {
+    alignItems: 'flex-start',
+    minHeight: 100,
+    paddingVertical: 12,
   },
-  mapIcon: {
+  descriptionValue: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '500',
+    lineHeight: 22,
+    marginTop: 3,
+  },
+  editIconContainer: {
+    padding: 6,
     marginLeft: 10,
-    padding: 5,
   },
-  // Styles for the new date/time row
-  dateTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 0,
-    marginTop: 10,
-  },
-  dateTimeFieldButton: {
-    width: '48%',
-    paddingHorizontal: 0,
+  mapButton: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 25,
+    padding: 8,
+    marginLeft: 10,
+    borderWidth: 1,
+    borderColor: '#F2BB47',
   },
 });
 

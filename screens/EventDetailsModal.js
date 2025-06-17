@@ -1,20 +1,58 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, Image, ScrollView, StyleSheet, TouchableOpacity, Linking, Platform, ActivityIndicator, Alert, Dimensions, StatusBar } from "react-native";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../firebase";
-import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+} from "react";
+import {
+  View,
+  Text,
+  Image,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  Linking,
+  Platform,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  StatusBar,
+} from "react-native";
+import {
+  doc,
+  getDoc,
+} from "firebase/firestore";
+import {
+  db
+} from "../firebase";
+import {
+  Ionicons
+} from "@expo/vector-icons";
+import {
+  useNavigation
+} from "@react-navigation/native";
+import {
+  LinearGradient
+} from "expo-linear-gradient";
 import dayjs from "dayjs";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('screen');
+const {
+  width: screenWidth,
+  height: screenHeight
+} = Dimensions.get('screen');
 
 // Add onOpenCreateMeetupModal prop
-const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOpenCreateMeetupModal }) => {
+const EventDetailsModal = ({
+  isVisible,
+  eventId,
+  sourceCollection,
+  onClose,
+  onOpenCreateMeetupModal
+}) => {
   const navigation = useNavigation();
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const scrollViewRef = useRef(null); // Ref for the image gallery ScrollView
 
   // If the component is not visible, return null immediately
   if (!isVisible) {
@@ -23,14 +61,22 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
 
   useEffect(() => {
     // Reset state when modal is opened (isVisible becomes true)
-    // No need to reset when it closes since it unmounts/re-mounts
     setEvent(null);
     setLoading(true);
-    setCurrentImageIndex(0);
+    setCurrentImageIndex(0); // Reset image index
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        x: 0,
+        animated: false
+      }); // Scroll to the first image
+    }
+
 
     const fetchEventDetails = async () => {
       if (!eventId || !sourceCollection) {
-        console.error("EventDetailsModal: Missing eventId or sourceCollection for data fetch.");
+        console.error(
+          "EventDetailsModal: Missing eventId or sourceCollection for data fetch."
+        );
         Alert.alert("Error", "Invalid event details provided.");
         setLoading(false);
         onClose();
@@ -42,9 +88,15 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
-          setEvent({ id: docSnap.id, ...docSnap.data() });
+          setEvent({
+            id: docSnap.id,
+            ...docSnap.data()
+          });
         } else {
-          console.warn("EventDetailsModal: No such document found for path:", `meetups/${sourceCollection}/events/${eventId}`);
+          console.warn(
+            "EventDetailsModal: No such document found for path:",
+            `meetups/${sourceCollection}/events/${eventId}`
+          );
           Alert.alert("Error", "Event not found.");
           onClose();
         }
@@ -70,15 +122,30 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
     Linking.openURL(url).catch((err) => console.error("Error opening map", err));
   };
 
+  // Calculate the actual content width for the modal, which will be the basis for image width
+  // This takes into account the modalOverlayFull and modalContentContainer padding
+  // AND the horizontal margin we want for the images.
+  // We'll define a constant for image padding for clarity and easier modification.
+  const IMAGE_HORIZONTAL_PADDING = 10;
+  const modalActualWidth = screenWidth - 40; // 20px padding on each side for modalOverlayFull and modalContentContainer
+  const imageDisplayWidth = modalActualWidth - (IMAGE_HORIZONTAL_PADDING * 2);
+
+
   const handleImageChange = (e) => {
     const contentOffsetX = e.nativeEvent.contentOffset.x;
-    const modalContentWidth = screenWidth - 40;
-    const imageIndex = Math.floor(contentOffsetX / modalContentWidth);
-    setCurrentImageIndex(imageIndex);
+    // The width of each "page" in the scroll view is the width of the image plus its horizontal padding.
+    const fullImageWidthWithPadding = imageDisplayWidth + (IMAGE_HORIZONTAL_PADDING * 2);
+    if (fullImageWidthWithPadding > 0) {
+      const imageIndex = Math.round(contentOffsetX / fullImageWidthWithPadding); // Use Math.round for better accuracy
+      setCurrentImageIndex(imageIndex);
+    }
   };
 
   const formatDateTime = (timestamp) => {
-    if (!timestamp) return { date: "TBD", time: "TBD" };
+    if (!timestamp) return {
+      date: "TBD",
+      time: "TBD"
+    };
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     return {
       date: dayjs(date).format('MMMM D, YYYY'),
@@ -86,9 +153,10 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
     };
   };
 
-  const { date: formattedDate, time: formattedTime } = formatDateTime(event?.date);
-
-  const modalActualWidth = screenWidth - 40;
+  const {
+    date: formattedDate,
+    time: formattedTime
+  } = formatDateTime(event?.date);
 
   // Status bar and navigation bar color management (unchanged)
   useEffect(() => {
@@ -126,23 +194,43 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
 
   return (
     <View style={styles.modalOverlayFull}>
-      <LinearGradient colors={["#D9043D", "#730220"]} style={[styles.modalContentContainer, { width: modalActualWidth }]}>
+      <LinearGradient colors={["#D9043D", "#730220"]} style={[styles.modalContentContainer, {
+        width: modalActualWidth
+      }]}>
         <TouchableOpacity style={styles.backButton} onPress={onClose}>
-          <Ionicons name="arrow-back" size={30} color="#FFFFFF" />
+          <Ionicons name="close" size={30} color="#FFFFFF" />
         </TouchableOpacity>
 
         <ScrollView contentContainerStyle={styles.scrollViewContent}>
           <View style={styles.galleryContainer}>
             <ScrollView
+              ref={scrollViewRef} // Assign the ref
               horizontal
               pagingEnabled
               onScroll={handleImageChange}
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.gallery}
+              // The contentContainerStyle here determines the "page" width
+              // This should be the width of the image plus its left/right padding
+              contentContainerStyle={{
+                width: event.photos?.length * (imageDisplayWidth + (IMAGE_HORIZONTAL_PADDING * 2)) || 0
+              }}
               scrollEventThrottle={16}
+              onMomentumScrollEnd={(e) => {
+                const contentOffsetX = e.nativeEvent.contentOffset.x;
+                const fullImageWidthWithPadding = imageDisplayWidth + (IMAGE_HORIZONTAL_PADDING * 2);
+                if (fullImageWidthWithPadding > 0) {
+                  const imageIndex = Math.round(contentOffsetX / fullImageWidthWithPadding);
+                  setCurrentImageIndex(imageIndex);
+                }
+              }}
             >
               {event.photos?.map((photo, index) => (
-                <Image key={index} source={{ uri: photo }} style={[styles.image, { width: modalActualWidth - 20 }]} />
+                <Image key={index} source={{
+                  uri: photo
+                }} style={[styles.image, {
+                  width: imageDisplayWidth, // Use the calculated display width
+                  marginHorizontal: IMAGE_HORIZONTAL_PADDING // Apply padding
+                }]} />
               ))}
             </ScrollView>
 
@@ -204,7 +292,9 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
             <View style={styles.organizerRow}>
               {event.sponsored && event.sponsor && event.sponsorIMG ? (
                 <>
-                  <Image source={{ uri: event.sponsorIMG }} style={styles.organizerImage} />
+                  <Image source={{
+                    uri: event.sponsorIMG
+                  }} style={styles.organizerImage} />
                   <Text style={styles.organizerText}>
                     Sponsored by <Text style={styles.rauxaText}>{event.sponsor}</Text>
                   </Text>
@@ -229,7 +319,9 @@ const EventDetailsModal = ({ isVisible, eventId, sourceCollection, onClose, onOp
                 <Text style={styles.rsvpButtonText}>Quick Create</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.rsvpButton, { backgroundColor: "#F2BB47" }]}
+                style={[styles.rsvpButton, {
+                  backgroundColor: "#F2BB47"
+                }]}
                 onPress={() => {
                   onClose(); // Close EventDetailsModal
                   onOpenCreateMeetupModal(event.sponsored ? "sponsored_template" : "template", event);
@@ -264,7 +356,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 20,
   },
-  // ... (rest of your styles remain the same)
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -277,19 +368,19 @@ const styles = StyleSheet.create({
   },
   galleryContainer: {
     position: "relative",
-    width: "100%",
+    width: "100%", // This now refers to the width of modalContentContainer
     height: 250,
     borderRadius: 15,
     overflow: 'hidden',
-    marginHorizontal: 10,
   },
   gallery: {
-    // No specific width here, images inside handle their width
+    // This will be calculated dynamically based on number of images and modalActualWidth
   },
   image: {
     height: 250,
     resizeMode: 'cover',
     borderRadius: 15,
+    // The width and marginHorizontal are dynamically set in the component
   },
   pageIndicators: {
     position: "absolute",
@@ -400,7 +491,10 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {
+      width: 0,
+      height: 2
+    },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
@@ -424,7 +518,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 6,
     marginTop: 10,
-    paddingHorizontal: 0,
+    paddingHorizontal: 0, // This should already be correct based on content padding
   },
   organizerImage: {
     width: 50,

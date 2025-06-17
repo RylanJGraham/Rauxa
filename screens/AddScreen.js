@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { ScrollView, Text, TouchableOpacity, StyleSheet, View, Alert, BackHandler } from "react-native";
-// import { useNavigation } from "@react-navigation/core"; // No longer needed here if all navigation handled by props
-import { collection, getDocs } from "firebase/firestore";
+import React, { useState, useEffect, useCallback } from "react";
+import { ScrollView, Text, TouchableOpacity, StyleSheet, View, Alert, BackHandler, ActivityIndicator } from "react-native";
+import { collection, getDocs, query, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { LinearGradient } from "expo-linear-gradient";
 import SearchBar from "../components/meetups/SearchBar";
@@ -9,20 +8,21 @@ import FilterModal from "../components/meetups/FiltersModal";
 import EventCard from "../components/meetups/EventCard";
 import SponsoredEventCard from "../components/meetups/SponsoredEventCard";
 import { Ionicons } from '@expo/vector-icons';
-// No longer import EventDetailsModal or CreateMeetupScreen directly here,
-// as they are managed by TabNavigator and passed via props.
 
-const tags = [
-  "Music", "Sports", "Karaoke", "Clubs", "Beach", "Dating",
-  "Study", "Language Exchange", "Games", "Hiking", "Cooking",
-  "Art", "Theater", "Movies", "Volunteer", "Meetups", "Video Games", "Tourism"
-];
+// Removed global definitions of tags, groupSizes, and INITIAL_LOAD_LIMIT from here.
 
-const groupSizes = Array.from({ length: 25 }, (_, i) => (i + 1) * 2);
-
-// MeetupScreen now accepts onOpenEventDetailsModal and onOpenCreateMeetupModal as props
 const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
-  // const navigation = useNavigation(); // Remove if not directly navigating elsewhere
+  // Define constants INSIDE the component to ensure proper scoping
+  const tags = [
+    "Music", "Sports", "Karaoke", "Clubs", "Beach", "Dating",
+    "Study", "Language Exchange", "Games", "Hiking", "Cooking",
+    "Art", "Theater", "Movies", "Volunteer", "Meetups", "Video Games", "Tourism"
+  ];
+
+  const groupSizes = Array.from({ length: 25 }, (_, i) => (i + 1) * 2);
+
+  const INITIAL_LOAD_LIMIT = 10; // Define here within the component's scope
+
   const [allRecommendedMeetups, setAllRecommendedMeetups] = useState([]);
   const [allSponsoredMeetups, setAllSponsoredMeetups] = useState([]);
 
@@ -33,35 +33,19 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
   const [selectedTags, setSelectedTags] = useState([]);
   const [selectedGroupSize, setSelectedGroupSize] = useState(null);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
-
-  // Removed isEventDetailsModalVisible, selectedEventId, selectedSourceCollection,
-  // isCreateMeetupModalVisible, createMeetupMode, createMeetupEventData
+  const [loading, setLoading] = useState(true);
 
   const isFilterActive = searchTerm !== "" || selectedTags.length > 0 || selectedGroupSize !== null;
 
-  // Handle Android back button for FilterModal only now
-  useEffect(() => {
-    const backAction = () => {
-      if (isFilterVisible) {
-        setIsFilterVisible(false);
-        return true; // Consume the back button press
-      }
-      return false; // Let default back button behavior happen for other navigation
-    };
-
-    const backHandler = BackHandler.addEventListener(
-      "hardwareBackPress",
-      backAction
-    );
-
-    return () => backHandler.remove();
-  }, [isFilterVisible]);
-
+  // Removed BackHandler-related useEffect hook as it's not applicable in web environments.
+  // If this is strictly a React Native mobile app, you would re-add it.
 
   useEffect(() => {
     const fetchMeetups = async () => {
+      setLoading(true);
       try {
-        const recommendedSnapshot = await getDocs(collection(db, "meetups", "Recommended_Meetups", "events"));
+        const recommendedQuery = query(collection(db, "meetups", "Recommended_Meetups", "events"), limit(INITIAL_LOAD_LIMIT));
+        const recommendedSnapshot = await getDocs(recommendedQuery);
         const recommendedData = recommendedSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -70,7 +54,8 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
         setAllRecommendedMeetups(recommendedData);
         setFilteredRecommendedMeetups(recommendedData);
 
-        const sponsoredSnapshot = await getDocs(collection(db, "meetups", "Sponsored_Meetups", "events"));
+        const sponsoredQuery = query(collection(db, "meetups", "Sponsored_Meetups", "events"), limit(INITIAL_LOAD_LIMIT));
+        const sponsoredSnapshot = await getDocs(sponsoredQuery);
         const sponsoredData = sponsoredSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
@@ -82,6 +67,8 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
       } catch (error) {
         console.error("Error fetching meetups:", error);
         Alert.alert("Error", "Failed to load meetups");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -89,8 +76,10 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
   }, []);
 
   useEffect(() => {
-    applyAllFilters(searchTerm, selectedTags, selectedGroupSize);
-  }, [searchTerm, selectedTags, selectedGroupSize, allRecommendedMeetups, allSponsoredMeetups]);
+    if (!loading) {
+      applyAllFilters(searchTerm, selectedTags, selectedGroupSize);
+    }
+  }, [searchTerm, selectedTags, selectedGroupSize, allRecommendedMeetups, allSponsoredMeetups, loading]);
 
 
   const handleSearch = (text) => {
@@ -153,23 +142,34 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
     setIsFilterVisible(!isFilterVisible);
   };
 
+  // Render a loading spinner or skeleton if loading
+  if (loading) {
+    return (
+      <LinearGradient colors={["#D9043D", "#730220"]} style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Loading meetups...</Text>
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient colors={["#D9043D", "#730220"]} style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         <View style={styles.searchFilterContainer}>
           <SearchBar value={searchTerm} onChangeText={handleSearch} />
 
+          {/* Updated Filter Button */}
           <TouchableOpacity
             onPress={toggleFilterVisibility}
             style={[
               styles.filterButton,
-              isFilterActive ? styles.filterButtonActive : styles.filterButtonInactive
+              isFilterActive ? styles.filterButtonActive : {}
             ]}
           >
             <Ionicons
-              name="filter"
+              name={isFilterActive ? "options" : "options-outline"}
               size={24}
-              color={isFilterActive ? "#D9043D" : "#0367A6"}
+              color="white" // Icon color is white
             />
           </TouchableOpacity>
         </View>
@@ -177,10 +177,10 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
         {isFilterVisible && (
           <View style={styles.filterSection}>
             <FilterModal
-              tags={tags}
+              tags={tags} // Now correctly scoped
               selectedTags={selectedTags}
               onTagSelect={handleTagFilter}
-              groupSizes={groupSizes}
+              groupSizes={groupSizes} // Now correctly scoped
               selectedGroupSize={selectedGroupSize}
               onGroupSizeSelect={handleGroupSizeSelect}
               onClose={() => setIsFilterVisible(false)}
@@ -196,7 +196,6 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
               <SponsoredEventCard
                 key={item.id}
                 event={item}
-                // Call the prop function
                 onPress={() => onOpenEventDetailsModal(item.id, item.sourceCollection)}
               />
             ))}
@@ -212,7 +211,6 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
               <EventCard
                 key={item.id}
                 event={item}
-                // Call the prop function
                 onPress={() => onOpenEventDetailsModal(item.id, item.sourceCollection)}
               />
             ))}
@@ -224,14 +222,11 @@ const MeetupScreen = ({ onOpenEventDetailsModal, onOpenCreateMeetupModal }) => {
         <Text style={styles.title}>Got Your Own Idea?</Text>
         <TouchableOpacity
           style={styles.createButton}
-          // Call the prop function
           onPress={() => onOpenCreateMeetupModal('create', {})}
         >
           <Text style={styles.createButtonText}>Create Your Own Meetup!</Text>
         </TouchableOpacity>
       </ScrollView>
-
-      {/* EventDetailsModal and CreateMeetupScreen are now rendered by TabNavigator */}
     </LinearGradient>
   );
 };
@@ -240,6 +235,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 0,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#D9043D',
+  },
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
   },
   searchFilterContainer: {
     flexDirection: "row",
@@ -250,14 +256,17 @@ const styles = StyleSheet.create({
     paddingRight: 20,
   },
   filterButton: {
-    padding: 10,
-    borderRadius: 50,
+    backgroundColor: '#F2BB47', // Nice yellow background
+    borderRadius: 15, // Rounded corners
+    padding: 10, // Padding around the icon
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   filterButtonActive: {
-    backgroundColor: '#000',
-  },
-  filterButtonInactive: {
-    backgroundColor: '#fff',
+    backgroundColor: '#E0A800', // Slightly darker yellow when active for feedback
   },
   title: {
     fontSize: 24,

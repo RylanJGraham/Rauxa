@@ -66,7 +66,7 @@ const TagSelectionModal = ({
 
   return (
     <Modal
-      animationType="slide"
+      animationType="fade" // Changed to fade for smoother transition
       transparent={true}
       visible={isVisible}
       onRequestClose={onClose}
@@ -76,10 +76,10 @@ const TagSelectionModal = ({
           <TouchableOpacity style={styles.closeButton} onPress={onClose}>
             <Ionicons name="close-circle-outline" size={30} color="white" />
           </TouchableOpacity>
-          <Text style={styles.modalHeading}>Select Tags</Text>
+          <Text style={styles.modalHeading}>Select Event Tags</Text> {/* More descriptive title */}
 
           {loading ? (
-            <ActivityIndicator size="large" color="#F2BB47" />
+            <ActivityIndicator size="large" color="#F2BB47" style={styles.loadingIndicator} />
           ) : error ? (
             <Text style={styles.errorText}>{error}</Text>
           ) : (
@@ -113,72 +113,76 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.85)', // Consistent dark overlay
   },
   modalView: {
-    backgroundColor: '#0367A6',
+    backgroundColor: '#1A1A2E', // Main dark background
     borderRadius: 20,
-    padding: 20,
+    padding: 25, // Increased padding
     width: '90%',
     maxHeight: '80%',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
   },
   closeButton: {
     position: 'absolute',
-    top: 10,
-    right: 10,
+    top: 15,
+    right: 15,
     zIndex: 1,
   },
   modalHeading: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: 'white',
-    marginBottom: 20,
+    marginBottom: 25, // Increased margin
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
     marginBottom: 20,
-    paddingBottom: 10, // Ensure scrollability
+    paddingBottom: 10,
   },
   tag: {
-    backgroundColor: '#A6B1C4',
-    borderRadius: 20,
+    backgroundColor: '#0367A6', // Blue accent for unselected
+    borderRadius: 25, // More rounded pills
     paddingVertical: 10,
-    paddingHorizontal: 15,
-    margin: 5,
+    paddingHorizontal: 18,
+    margin: 6, // Slightly increased margin
     borderWidth: 1,
     borderColor: 'transparent',
   },
   selectedTag: {
-    backgroundColor: '#F2BB47',
-    borderColor: 'white',
+    backgroundColor: '#F2BB47', // Gold accent for selected
+    borderColor: 'white', // White border for selected
   },
   tagText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600', // Slightly bolder
   },
   saveButton: {
-    backgroundColor: '#D9043D',
-    borderRadius: 25,
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    marginTop: 10,
+    backgroundColor: '#D9043D', // Red accent
+    borderRadius: 30, // More rounded
+    paddingVertical: 14, // Increased padding
+    paddingHorizontal: 40,
+    marginTop: 20, // Increased margin
   },
   saveButtonText: {
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold',
   },
+  loadingIndicator: {
+    marginTop: 30,
+    marginBottom: 20,
+  },
   errorText: {
-    color: '#F2BB47',
+    color: '#F2BB47', // Gold for error text
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,

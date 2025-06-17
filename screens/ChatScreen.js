@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react"; // Already there
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native"; // Already there
-import { LinearGradient } from "expo-linear-gradient"; // Already there
+import React, { useState, useEffect } from "react";
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView, Platform } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   collection,
   query,
@@ -8,7 +8,6 @@ import {
   onSnapshot,
   doc,
   getDoc,
-  setDoc // Removed: No longer needed for read receipts
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -43,147 +42,146 @@ const ChatScreen = ({ navigation }) => {
 
   // 2. Fetch Chat Data and categorize them (MODIFIED)
   useEffect(() => {
-  if (!currentUserId) {
-    setChatList([]);
-    setNewMatchEvents([]);
-    setLoading(false); // Ensure loading is false if no user
-    return;
-  }
+    if (!currentUserId) {
+      setChatList([]);
+      setNewMatchEvents([]);
+      setLoading(false); // Ensure loading is false if no user
+      return;
+    }
 
-  setLoading(true); // Set loading to true when starting to fetch data
+    setLoading(true); // Set loading to true when starting to fetch data
 
-  const chatsQuery = query(
-    collection(db, "chats"),
-    where("participants", "array-contains", currentUserId),
-  );
-
+    const chatsQuery = query(
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUserId),
+    );
 
     console.log("ChatScreen: Setting up chat snapshot listener for:", currentUserId);
 
     const unsubscribeChats = onSnapshot(chatsQuery, async (snapshot) => {
-    const tempChatList = [];
-    const tempNewMatchEvents = [];
-    const profilesCache = new Map(); // Cache for profiles
+      const tempChatList = [];
+      const tempNewMatchEvents = [];
+      const profilesCache = new Map(); // Cache for profiles
 
-    // Step 1: Collect all necessary data fetches concurrently
-    const chatProcessingPromises = snapshot.docs.map(async (chatDoc) => {
-      try {
-        const chatData = chatDoc.data();
-        const chatId = chatDoc.id;
-        const eventId = chatData.eventId;
-        const isNewMatch = chatData.isNewMatch || false;
-        const participants = chatData.participants;
-        const participantCount = Array.isArray(participants) ? participants.length : 0;
+      // Step 1: Collect all necessary data fetches concurrently
+      const chatProcessingPromises = snapshot.docs.map(async (chatDoc) => {
+        try {
+          const chatData = chatDoc.data();
+          const chatId = chatDoc.id;
+          const eventId = chatData.eventId;
+          const isNewMatch = chatData.isNewMatch || false;
+          const participants = chatData.participants;
+          const participantCount = Array.isArray(participants) ? participants.length : 0;
 
-        let chatTitle = "Unnamed Event";
-        let chatImageUrl = null;
-        let lastMessageText = chatData.lastMessage?.text || "No messages yet.";
-        let lastMessageSenderId = chatData.lastMessage?.senderId;
-        let lastMessageTimestamp = chatData.lastMessage?.timestamp;
+          let chatTitle = "Unnamed Event";
+          let chatImageUrl = null;
+          let lastMessageText = chatData.lastMessage?.text || "No messages yet.";
+          let lastMessageSenderId = chatData.lastMessage?.senderId;
+          let lastMessageTimestamp = chatData.lastMessage?.timestamp;
 
-        // Fetch event details concurrently if eventId exists
-        if (eventId) {
-          const eventRef = doc(db, "live", eventId);
-          const eventSnap = await getDoc(eventRef); // Await this specific event fetch
-          if (eventSnap.exists()) {
-            const eventData = eventSnap.data();
-            chatTitle = eventData.title || `Event ${eventId.substring(0, 4)}...`;
-            if (eventData.photos && eventData.photos.length > 0) {
-              chatImageUrl = eventData.photos[0];
+          // Fetch event details concurrently if eventId exists
+          if (eventId) {
+            const eventRef = doc(db, "live", eventId);
+            const eventSnap = await getDoc(eventRef); // Await this specific event fetch
+            if (eventSnap.exists()) {
+              const eventData = eventSnap.data();
+              chatTitle = eventData.title || `Event ${eventId.substring(0, 4)}...`;
+              if (eventData.photos && eventData.photos.length > 0) {
+                chatImageUrl = eventData.photos[0];
+              }
+            } else {
+              console.warn(`Event ${eventId} not found for chat ${chatId}.`);
             }
           } else {
-            console.warn(`Event ${eventId} not found for chat ${chatId}.`);
+            chatTitle = chatData.name || "Direct Chat";
           }
-        } else {
-          chatTitle = chatData.name || "Direct Chat";
-        }
 
-        // Fetch last message sender's profile concurrently if needed
-        let lastMessageSenderDisplayName = "System";
-        if (lastMessageSenderId && lastMessageSenderId !== "system") {
-          if (!profilesCache.has(lastMessageSenderId)) {
-            const profileRef = doc(db, "users", lastMessageSenderId, "ProfileInfo", "userinfo");
-            const profileSnap = await getDoc(profileRef); // Await this specific profile fetch
-            if (profileSnap.exists()) {
-              const profileData = profileSnap.data();
-              const displayName = profileData.displayFirstName || profileData.name || `User ${lastMessageSenderId.substring(0, 4)}`;
-              profilesCache.set(lastMessageSenderId, displayName);
-            } else {
-              profilesCache.set(lastMessageSenderId, `User ${lastMessageSenderId.substring(0, 4)}`);
+          // Fetch last message sender's profile concurrently if needed
+          let lastMessageSenderDisplayName = "System";
+          if (lastMessageSenderId && lastMessageSenderId !== "system") {
+            if (!profilesCache.has(lastMessageSenderId)) {
+              const profileRef = doc(db, "users", lastMessageSenderId, "ProfileInfo", "userinfo");
+              const profileSnap = await getDoc(profileRef); // Await this specific profile fetch
+              if (profileSnap.exists()) {
+                const profileData = profileSnap.data();
+                const displayName = profileData.displayFirstName || profileData.name || `User ${lastMessageSenderId.substring(0, 4)}`;
+                profilesCache.set(lastMessageSenderId, displayName);
+              } else {
+                profilesCache.set(lastMessageSenderId, `User ${lastMessageSenderId.substring(0, 4)}`);
+              }
             }
+            lastMessageSenderDisplayName = profilesCache.get(lastMessageSenderId);
+          } else if (lastMessageSenderId === "system") {
+            lastMessageSenderDisplayName = "Rauxa";
           }
-          lastMessageSenderDisplayName = profilesCache.get(lastMessageSenderId);
-        } else if (lastMessageSenderId === "system") {
-          lastMessageSenderDisplayName = "Rauxa";
+
+          return {
+            chatId,
+            chatTitle,
+            chatImageUrl,
+            isNewMatch,
+            participantCount,
+            lastMessageText,
+            lastMessageSenderDisplayName,
+            lastMessageTimestamp,
+            eventId,
+          };
+        } catch (innerError) {
+          console.error(`ChatScreen: Error processing chat document ${chatDoc.id}:`, innerError);
+          return null; // Return null for failed processing
         }
+      });
 
-        return {
-          chatId,
-          chatTitle,
-          chatImageUrl,
-          isNewMatch,
-          participantCount,
-          lastMessageText,
-          lastMessageSenderDisplayName,
-          lastMessageTimestamp,
-          eventId,
-        };
-      } catch (innerError) {
-        console.error(`ChatScreen: Error processing chat document ${chatDoc.id}:`, innerError);
-        return null; // Return null for failed processing
-      }
+      // Resolve all promises concurrently
+      const processedChats = await Promise.all(chatProcessingPromises);
+
+      // Step 2: Filter out failed ones and categorize
+      processedChats.forEach(processedChat => {
+        if (!processedChat) return; // Skip if processing failed
+
+        const {
+          chatId, chatTitle, chatImageUrl, isNewMatch, participantCount,
+          lastMessageText, lastMessageSenderDisplayName, lastMessageTimestamp, eventId
+        } = processedChat;
+
+        if (isNewMatch && participantCount === 2) {
+          tempNewMatchEvents.push({
+            id: chatId,
+            title: chatTitle,
+            image: chatImageUrl,
+            eventId: eventId,
+          });
+        } else if (participantCount >= 2) {
+          tempChatList.push({
+            id: chatId,
+            title: chatTitle,
+            sender: lastMessageSenderDisplayName,
+            message: lastMessageText,
+            timestamp: lastMessageTimestamp,
+            image: chatImageUrl,
+            eventId: eventId,
+            hasUnread: false,
+          });
+        }
+      });
+
+      // Sort regular chats by timestamp
+      tempChatList.sort((a, b) => {
+        const tsA = a.timestamp ? a.timestamp.toMillis() : 0;
+        const tsB = b.timestamp ? b.timestamp.toMillis() : 0;
+        return tsB - tsA;
+      });
+
+      setNewMatchEvents(tempNewMatchEvents);
+      setChatList(tempChatList);
+      setLoading(false); // Set loading to false only after all data is processed
+    }, (error) => {
+      console.error("ChatScreen: Error listening to chats (outer snapshot error):", error);
+      setLoading(false); // Also set loading to false on error
     });
 
-    // Resolve all promises concurrently
-    const processedChats = await Promise.all(chatProcessingPromises);
-
-    // Step 2: Filter out failed ones and categorize
-    processedChats.forEach(processedChat => {
-      if (!processedChat) return; // Skip if processing failed
-
-      const {
-        chatId, chatTitle, chatImageUrl, isNewMatch, participantCount,
-        lastMessageText, lastMessageSenderDisplayName, lastMessageTimestamp, eventId
-      } = processedChat;
-
-      if (isNewMatch && participantCount === 2) {
-        tempNewMatchEvents.push({
-          id: chatId,
-          title: chatTitle,
-          image: chatImageUrl,
-          eventId: eventId,
-        });
-      } else if (participantCount >= 2) {
-        tempChatList.push({
-          id: chatId,
-          title: chatTitle,
-          sender: lastMessageSenderDisplayName,
-          message: lastMessageText,
-          timestamp: lastMessageTimestamp,
-          image: chatImageUrl,
-          eventId: eventId,
-          hasUnread: false,
-        });
-      }
-    });
-
-    // Sort regular chats by timestamp
-    tempChatList.sort((a, b) => {
-      const tsA = a.timestamp ? a.timestamp.toMillis() : 0;
-      const tsB = b.timestamp ? b.timestamp.toMillis() : 0;
-      return tsB - tsA;
-    });
-
-    setNewMatchEvents(tempNewMatchEvents);
-    setChatList(tempChatList);
-    setLoading(false); // Set loading to false only after all data is processed
-  }, (error) => {
-    console.error("ChatScreen: Error listening to chats (outer snapshot error):", error);
-    setLoading(false); // Also set loading to false on error
-  });
-
-  return () => unsubscribeChats();
-}, [currentUserId]);
+    return () => unsubscribeChats();
+  }, [currentUserId]);
 
   const handleChatPress = (chatId, chatTitle, eventId) => {
     navigation.navigate('ChatDetail', { chatId, chatTitle, eventId });
@@ -200,7 +198,7 @@ const ChatScreen = ({ navigation }) => {
   return (
     <LinearGradient colors={["#0367A6", "#003f6b"]} style={styles.container}>
       {/* HEADER */}
-      <ChatHeader title="Messages" /> {/* Changed header title as it's no longer just "New Event Matches" */}
+      <ChatHeader title="Messages" />
 
       {/* NEW EVENT MATCHES SECTION */}
       <Text style={styles.sectionTitle}>New Event Matches</Text>
@@ -209,6 +207,7 @@ const ChatScreen = ({ navigation }) => {
           data={newMatchEvents}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
+            // IMPORTANT: Ensure EventMatchCard component properly wraps all its text in <Text>
             <EventMatchCard
               event={item}
               onPress={handleChatPress}
@@ -231,11 +230,11 @@ const ChatScreen = ({ navigation }) => {
         data={chatList}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
+          // IMPORTANT: Ensure MessageItem component properly wraps all its text in <Text>
           <MessageItem
             item={item}
             onPress={() => handleChatPress(item.id, item.title, item.eventId)}
-            // hasUnread prop is now always false as read receipt logic is removed
-            hasUnread={false}
+            hasUnread={false} // As read receipt logic is removed
           />
         )}
         ListEmptyComponent={() => (

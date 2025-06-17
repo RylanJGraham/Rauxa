@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Ionicons } from '@expo/vector-icons'; // Import Ionicons for close button
 
 const GenericEditModal = ({
   visible,
@@ -14,6 +15,8 @@ const GenericEditModal = ({
   handleConfirmModal,
   handleCancelModal
 }) => {
+  const datePickerValue = tempSelectedDate instanceof Date ? tempSelectedDate : new Date();
+
   return (
     <Modal
       animationType="fade"
@@ -23,16 +26,20 @@ const GenericEditModal = ({
     >
       <View style={styles.centeredView}>
         <View style={styles.modalView}>
+          <TouchableOpacity style={styles.closeButton} onPress={handleCancelModal}>
+            <Ionicons name="close-circle-outline" size={30} color="white" />
+          </TouchableOpacity>
           <Text style={styles.modalHeading}>{modalTitle}</Text>
           {editingField === 'date' || editingField === 'time' ? (
             <DateTimePicker
               testID="modalPicker"
-              value={tempSelectedDate || new Date()}
+              value={datePickerValue}
               mode={editingField === 'date' ? 'date' : 'time'}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleDateOrTimeChange}
               minimumDate={editingField === 'date' ? new Date() : undefined}
-              textColor={Platform.OS === 'ios' ? 'white' : undefined} // Apply textColor for iOS only, Android often handles this differently
+              textColor={Platform.OS === 'ios' ? 'white' : undefined} // For iOS spinner text color
+              style={Platform.OS === 'ios' ? styles.datePickerIOS : null} // Apply specific style for iOS
             />
           ) : (
             <TextInput
@@ -43,8 +50,10 @@ const GenericEditModal = ({
               multiline={editingField === 'description'}
               numberOfLines={editingField === 'description' ? 4 : 1}
               placeholder={`Enter ${modalTitle.toLowerCase().replace(/edit |set /g, '')}`}
-              placeholderTextColor="#ccc"
+              placeholderTextColor="#888" // Darker placeholder
               autoFocus={true}
+              blurOnSubmit={true}
+              selectionColor="#F2BB47" // Gold cursor
             />
           )}
           <View style={styles.modalButtonRow}>
@@ -72,51 +81,70 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.85)', // Darker overlay
   },
   modalView: {
-    backgroundColor: '#0367A6',
+    backgroundColor: '#1A1A2E', // Main dark background
     borderRadius: 20,
-    padding: 20,
+    padding: 25,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    width: '80%',
+    shadowOpacity: 0.4, // Stronger shadow
+    shadowRadius: 8, // Larger shadow radius
+    elevation: 10,
+    width: '85%',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    zIndex: 1,
   },
   modalHeading: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 20,
+    color: '#fff',
+    marginBottom: 25,
   },
   modalInput: {
     width: '100%',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'white',
+    padding: 15, // Increased padding
+    borderWidth: 1,
+    borderColor: '#4A4A6A', // Darker border
+    borderRadius: 10, // More rounded
     color: 'white',
     fontSize: 18,
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 25,
+    backgroundColor: '#2C2C47', // Darker input background
+  },
+  datePickerIOS: {
+    width: '100%', // Ensure it takes full width on iOS
   },
   modalButtonRow: {
     flexDirection: 'row',
-    marginTop: 15,
+    marginTop: 20,
   },
   modalButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 25,
     borderRadius: 10,
     marginHorizontal: 10,
+    minWidth: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000', // Add shadow to buttons
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   buttonCancel: {
-    backgroundColor: '#A6B1C4',
+    backgroundColor: '#888',
   },
   buttonConfirm: {
     backgroundColor: '#F2BB47',
@@ -129,7 +157,7 @@ const styles = StyleSheet.create({
   buttonTextBlack: {
     fontWeight: 'bold',
     fontSize: 16,
-    color: '#000',
+    color: '#1A1A2E', // Dark blue text for gold button
   },
 });
 
