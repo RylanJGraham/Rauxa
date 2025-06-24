@@ -7,7 +7,7 @@ import dayjs from 'dayjs';
 const { width } = Dimensions.get('window');
 
 // Helper component to render each user in the horizontal list
-const UserCardItem = ({ user, onPress, showActions, onAccept, onDecline, status }) => (
+const UserCardItem = ({ user, onPress, showActions, onAccept, onDecline, status, eventId }) => ( // Add eventId prop
   <View style={userCardStyles.container}>
     <TouchableOpacity onPress={() => onPress(user.profileInfo)} style={userCardStyles.profileTouchArea}>
       <Image
@@ -22,12 +22,12 @@ const UserCardItem = ({ user, onPress, showActions, onAccept, onDecline, status 
     </TouchableOpacity>
     {showActions && status === 'pending' && (
       <View style={userCardStyles.actionButtons}>
-        <TouchableOpacity style={[userCardStyles.button, userCardStyles.acceptButton]} onPress={() => onAccept(user.id)}>
-          <Ionicons name="checkmark" size={18} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity style={[userCardStyles.button, userCardStyles.declineButton]} onPress={() => onDecline(user.id)}>
-          <Ionicons name="close" size={18} color="#fff" />
-        </TouchableOpacity>
+        <TouchableOpacity style={[userCardStyles.button, userCardStyles.acceptButton]} onPress={() => onAccept(eventId, user.id)}> {/* Pass eventId */}
+          <Ionicons name="checkmark" size={18} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[userCardStyles.button, userCardStyles.declineButton]} onPress={() => onDecline(eventId, user.id)}> {/* Pass eventId */}
+          <Ionicons name="close" size={18} color="#fff" />
+        </TouchableOpacity>
       </View>
     )}
   </View>
@@ -225,13 +225,14 @@ const HostedEventManagementCard = ({
               data={getActiveData()}
               renderItem={({ item }) => (
                 <UserCardItem
-                  user={item}
-                  onPress={onViewAttendeeProfile}
-                  showActions={activeTab === 'pending'}
-                  onAccept={onAcceptRequest}
-                  onDecline={onDeclineRequest}
-                  status={activeTab}
-                />
+                      user={item}
+                      onPress={onViewAttendeeProfile}
+                      showActions={activeTab === 'pending'}
+                      onAccept={onAcceptRequest}
+                      onDecline={onDeclineRequest}
+                      status={activeTab}
+                      eventId={event.id}
+                    />
               )}
               keyExtractor={(item) => item.id}
               horizontal={true}

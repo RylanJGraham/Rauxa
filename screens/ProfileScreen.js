@@ -1,62 +1,147 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
-import { auth, db } from "../firebase";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from "react-native";
+import { auth, db, storage } from "../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { ref, deleteObject } from "firebase/storage";
 import { LinearGradient } from "expo-linear-gradient";
 import ProfileImageGallery from "../components/profile/ProfileImageGallery";
 import ProfileButtons from "../components/profile/ProfileButtons";
 import ProfileEdit from "../components/profile/ProfileEdit";
-import SettingsModal from "../components/profile/SettingsModal"; // Import the SettingsModal
+import SettingsModal from "../components/profile/SettingsModal";
 import { signOut } from "firebase/auth";
-// Removed Ionicons import as it will now be in ProfileButtons.js
 
 const ProfileScreen = () => {
     const [profileData, setProfileData] = useState(null);
     const [viewMode, setViewMode] = useState("profile");
     const [activeIndex, setActiveIndex] = useState(0);
-    const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false); // New state for modal visibility
+    const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState(null);
+
+    useEffect(() => {
+        const unsubscribeAuth = auth.onAuthStateChanged(user => {
+            if (user) {
+                setCurrentUserId(user.uid);
+            } else {
+                setCurrentUserId(null);
+                console.log("No user logged in.");
+            }
+        });
+        return () => unsubscribeAuth();
+    }, []);
 
     useEffect(() => {
         const fetchProfile = async () => {
-            if (auth.currentUser) {
-                const userRef = doc(db, "users", auth.currentUser.uid, "ProfileInfo", "userinfo");
+            if (!currentUserId) {
+                setProfileData(null);
+                return;
+            }
+
+            try {
+                const userRef = doc(db, "users", currentUserId, "ProfileInfo", "userinfo");
                 const userSnap = await getDoc(userRef);
 
                 if (userSnap.exists()) {
                     const data = userSnap.data();
-                    // Initialize education field if it doesn't exist
-                    if (!data.education) {
-                        data.education = {
-                            university: "",
-                        };
-                    }
-                    if (!data.languages) {
-                        data.languages = [];
-                    }
-                    setProfileData(data);
+                    const initialData = {
+                        displayFirstName: '',
+                        displayLastName: '',
+                        age: '',
+                        bio: '',
+                        gender: '',
+                        interests: [],
+                        education: { university: "" },
+                        languages: [],
+                        profileImages: [],
+                        ...data,
+                    };
+
+                    const images = Array.isArray(initialData.profileImages) ? initialData.profileImages : [];
+                    const paddedImages = [...images, ...Array(Math.max(0, 9 - images.length)).fill(null)];
+
+                    setProfileData({ ...initialData, profileImages: paddedImages });
+                    console.log("ProfileScreen: Fetched profile data and padded images:", { ...initialData, profileImages: paddedImages });
+                } else {
+                    console.log("ProfileScreen: No such user document! Initializing default profile.");
+                    setProfileData({
+                        displayFirstName: '', displayLastName: '', age: '', bio: '', gender: '',
+                        interests: [], education: { university: "" }, languages: [],
+                        profileImages: Array(9).fill(null),
+                    });
                 }
+            } catch (error) {
+                console.error("ProfileScreen: Error fetching profile:", error);
+                Alert.alert("Error", "Failed to load profile data.");
+                setProfileData(null);
             }
         };
+
         fetchProfile();
-    }, []);
+    }, [currentUserId]);
 
     const handleSaveProfile = async (updatedProfile) => {
-        if (auth.currentUser) {
-            const userRef = doc(db, "users", auth.currentUser.uid, "ProfileInfo", "userinfo");
+        if (!currentUserId) {
+            Alert.alert("Error", "User not authenticated. Cannot save profile.");
+            return;
+        }
+
+        const userRef = doc(db, "users", currentUserId, "ProfileInfo", "userinfo");
+
+        try {
+            const newFinalImages = updatedProfile.profileImages.filter(Boolean);
+
+            const originalImages = Array.isArray(profileData?.profileImages) ? profileData.profileImages.filter(Boolean) : [];
+            const imagesToDelete = originalImages.filter(
+                (url) => url && !newFinalImages.includes(url) && url.startsWith('http')
+            );
+
+            console.log("ProfileScreen: Images identified for deletion:", imagesToDelete);
+
+            const deletePromises = imagesToDelete.map(async (url) => {
+                try {
+                    const urlPath = new URL(url).pathname;
+                    const filenameInStorage = decodeURIComponent(urlPath.substring(urlPath.indexOf('/o/') + 3));
+
+                    console.log(`ProfileScreen: Attempting to delete URL: ${url}`);
+                    console.log(`ProfileScreen: Derived storage path: ${filenameInStorage}`);
+
+                    if (filenameInStorage && filenameInStorage.startsWith('profilePics/')) {
+                        const imageRef = ref(storage, filenameInStorage);
+                        await deleteObject(imageRef);
+                        console.log(`ProfileScreen: Successfully deleted image from storage: ${filenameInStorage}`);
+                    } else {
+                        console.warn(`ProfileScreen: Derived filename '${filenameInStorage}' is invalid or not in 'profilePics/' for deletion from URL: ${url}`);
+                    }
+                } catch (deleteError) {
+                    console.error(`ProfileScreen: Failed to delete image from storage: ${url}`, deleteError);
+                    console.error("ProfileScreen: Firebase Storage Error Object:", deleteError);
+                }
+            });
+
+            await Promise.all(deletePromises);
 
             const completeProfile = {
                 ...updatedProfile,
-                education: updatedProfile.education || {
-                    university: "",
-                    graduationYear: ""
-                },
+                education: updatedProfile.education || { university: "", graduationYear: "" },
                 languages: updatedProfile.languages || [],
-                topSongs: updatedProfile.topSongs || []
+                topSongs: updatedProfile.topSongs || [],
+                profileImages: newFinalImages,
             };
 
+            console.log("ProfileScreen: Attempting to save profile data to Firestore:", completeProfile);
             await updateDoc(userRef, completeProfile);
-            setProfileData(completeProfile);
+            console.log("ProfileScreen: Profile data saved successfully to Firestore!");
+
+            setProfileData(prev => ({
+                ...completeProfile,
+                profileImages: [...completeProfile.profileImages, ...Array(Math.max(0, 9 - completeProfile.profileImages.length)).fill(null)]
+            }));
+
             setViewMode("profile");
+            Alert.alert("Success", "Profile updated successfully!"); // <-- This is the only success alert now
+
+        } catch (error) {
+            console.error("ProfileScreen: Error saving profile:", error);
+            Alert.alert("Save Error", "Failed to save profile changes. " + error.message); // <-- This is the only main error alert
         }
     };
 
@@ -64,19 +149,15 @@ const ProfileScreen = () => {
         try {
             await signOut(auth);
             console.log("User signed out successfully.");
-            // Assuming you have navigation to a login screen after logout
-            // navigation.replace('Login'); // Uncomment if you have navigation setup
         } catch (error) {
             console.error("Error signing out: ", error);
         }
     };
 
-    // New function to open the settings modal
     const handleOpenSettingsModal = () => {
         setIsSettingsModalVisible(true);
     };
 
-    // Function to close the settings modal
     const handleCloseSettingsModal = () => {
         setIsSettingsModalVisible(false);
     };
@@ -96,7 +177,7 @@ const ProfileScreen = () => {
                     setViewMode={setViewMode}
                     viewMode={viewMode}
                     handleLogout={handleLogout}
-                    handleOpenSettingsModal={handleOpenSettingsModal} // Pass the new function down
+                    handleOpenSettingsModal={handleOpenSettingsModal}
                 />
             </View>
 
@@ -110,16 +191,17 @@ const ProfileScreen = () => {
 
             {viewMode === "edit" && (
                 <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
-                    <ProfileEdit profileData={profileData} onSaveProfile={handleSaveProfile} />
+                    <ProfileEdit
+                        profileData={profileData}
+                        onSaveProfile={handleSaveProfile}
+                        userId={currentUserId}
+                    />
                 </ScrollView>
             )}
 
-            {/* Render the SettingsModal */}
             <SettingsModal
                 isVisible={isSettingsModalVisible}
                 onClose={handleCloseSettingsModal}
-                // If you use navigation inside the modal (e.g., after delete account)
-                // pass it down: navigation={navigation}
             />
         </LinearGradient>
     );

@@ -82,53 +82,99 @@ const HubScreen = ({ navigation }) => {
     return unsubscribeAuth;
   }, []);
 
-  // --- Fetch User RSVPs ---
   useEffect(() => {
-    if (!userId) {
-      setUserRsvps([]); // Clear RSVPs if user logs out
-      // If userId is null on initial load, ensure overall loading state is handled.
-      // Potentially set loading to false here if no user means no data to fetch.
-      if (!auth.currentUser && !loading) setLoading(false); // If no user and not already loading.
-      return;
-    }
+  if (!userId) {
+    setUserRsvps([]);
+    setLoading(false); // Ensure loading is false if no user
+    return;
+  }
 
-    const rsvpCollectionRef = collection(db, 'users', userId, 'rsvp');
-    const unsubscribeRsvps = onSnapshot(rsvpCollectionRef, async (rsvpSnapshot) => {
-      const fetchedRsvps = [];
-      for (const rsvpDoc of rsvpSnapshot.docs) {
-        const eventId = rsvpDoc.id;
-        const rsvpData = rsvpDoc.data();
+  const rsvpCollectionRef = collection(db, 'users', userId, 'rsvp');
+  const activeRsvpListeners = new Map(); // To store unsubscribe functions for each event's attendee status
 
-        const eventRef = doc(db, 'live', eventId);
-        const eventSnap = await getDoc(eventRef);
-        if (!eventSnap.exists()) {
-          console.warn(`RSVP event ${eventId} not found in 'live' collection. Removing stale RSVP.`);
-          // Optionally, delete the stale RSVP document if the event no longer exists
-          // await deleteDoc(doc(db, 'users', userId, 'rsvp', eventId));
-          continue;
-        }
-        const eventDetails = { id: eventId, ...eventSnap.data() };
+  const unsubscribeRsvps = onSnapshot(rsvpCollectionRef, async (rsvpSnapshot) => {
+    // Collect all event IDs from the current RSVP snapshot
+    const currentRsvpEventIds = new Set(rsvpSnapshot.docs.map(doc => doc.id));
 
-        const attendeeRef = doc(db, 'live', eventId, 'attendees', userId);
-        const attendeeSnap = await getDoc(attendeeRef);
-        const isAccepted = attendeeSnap.exists();
-
-        fetchedRsvps.push({
-          ...rsvpData,
-          eventId: eventId,
-          eventDetails: eventDetails,
-          isAccepted: isAccepted,
-        });
+    // Cleanup listeners for events that are no longer in the RSVP list
+    activeRsvpListeners.forEach((unsub, eventId) => {
+      if (!currentRsvpEventIds.has(eventId)) {
+        unsub(); // Unsubscribe if event is no longer present
+        activeRsvpListeners.delete(eventId);
       }
-      setUserRsvps(fetchedRsvps);
-      // Mark loading as false for RSVPs if you manage separate loading states
-    }, (error) => {
-      console.error('Error listening to user RSVPs:', error);
-      // Handle error, e.g., show an alert
     });
 
-    return () => unsubscribeRsvps();
-  }, [userId]);
+    const fetchedRsvpsPromises = rsvpSnapshot.docs.map(async (rsvpDoc) => {
+      const eventId = rsvpDoc.id;
+      const rsvpData = rsvpDoc.data();
+
+      const eventRef = doc(db, 'live', eventId);
+      const eventSnap = await getDoc(eventRef); // Still a getDoc here, but event details don't change as frequently as RSVP status.
+
+      if (!eventSnap.exists()) {
+        console.warn(`RSVP event ${eventId} not found in 'live' collection. Removing stale RSVP.`);
+        // await deleteDoc(doc(db, 'users', userId, 'rsvp', eventId)); // Consider uncommenting this for data cleanliness
+        return null; // Skip this RSVP
+      }
+      const eventDetails = { id: eventId, ...eventSnap.data() };
+
+      const attendeeRef = doc(db, 'live', eventId, 'attendees', userId);
+
+      // Set up or update the listener for this specific attendee's status
+      if (activeRsvpListeners.has(eventId)) {
+        // If a listener already exists, it means the status will be updated via its callback
+        // For now, we'll return a placeholder and let the listener handle the actual state update.
+        // This is a common pattern when nesting snapshots.
+        // Alternatively, you could immediately fetch the current status here and then let the listener
+        // update it again if it changes later.
+        const existingRsvp = userRsvps.find(r => r.eventId === eventId);
+        return existingRsvp || { ...rsvpData, eventId, eventDetails, isAccepted: false }; // Placeholder
+      }
+
+      // If no listener exists, create one
+      const unsubscribeAttendee = onSnapshot(attendeeRef, (attendeeSnap) => {
+        const isAccepted = attendeeSnap.exists();
+        setUserRsvps(prevRsvps => {
+          const updatedRsvps = prevRsvps.map(rsvp =>
+            rsvp.eventId === eventId
+              ? { ...rsvp, isAccepted: isAccepted }
+              : rsvp
+          );
+          // If this is a new RSVP being added to the list
+          if (!updatedRsvps.some(rsvp => rsvp.eventId === eventId)) {
+            return [...updatedRsvps, { ...rsvpData, eventId, eventDetails, isAccepted }];
+          }
+          return updatedRsvps;
+        });
+      }, (error) => {
+        console.error(`Error listening to attendee status for event ${eventId}:`, error);
+      });
+      activeRsvpListeners.set(eventId, unsubscribeAttendee); // Store the unsubscribe function
+
+      // For the initial pass, fetch the status immediately
+      const isAccepted = (await getDoc(attendeeRef)).exists();
+      return {
+        ...rsvpData,
+        eventId: eventId,
+        eventDetails: eventDetails,
+        isAccepted: isAccepted,
+      };
+    });
+
+    const resolvedRsvps = (await Promise.all(fetchedRsvpsPromises)).filter(Boolean);
+    setUserRsvps(resolvedRsvps);
+    setLoading(false);
+  }, (error) => {
+    console.error('Error listening to user RSVPs:', error);
+    setLoading(false);
+  });
+
+  // Cleanup all listeners when the component unmounts or userId changes
+  return () => {
+    unsubscribeRsvps();
+    activeRsvpListeners.forEach(unsub => unsub());
+  };
+}, [userId]); // Dependency array, re-run if userId changes
 
   // --- Fetch Hosted Events ---
   useEffect(() => {
@@ -275,6 +321,7 @@ const HubScreen = ({ navigation }) => {
 
   // --- Event Management Handlers ---
   const handleAcceptRequest = useCallback(async (eventId, requestId) => {
+    console.log("handleAcceptRequest called with eventId:", eventId, "requestId:", requestId);
     const rsvpUserId = requestId;
     if (!userId) { Alert.alert("Error", "Host user not authenticated."); return; }
 
