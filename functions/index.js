@@ -4,7 +4,31 @@ admin.initializeApp();
 
 const db = admin.firestore();
 
-// Changed the document path from 'approved' to 'attendees'
+const eventTriggers = require("./eventTriggers");
+
+exports.onLiveEventDelete = eventTriggers.onLiveEventDelete;
+
+/**
+ * Marks a user's new chat status in the 'new' subcollection.
+ * @param {admin.firestore.DocumentReference} chatRef
+ * @param {string} userId - ID of the user to mark as new
+ * @param {admin.firestore.Transaction} transaction - Firestore transaction
+ * @return {Promise<void>} - Promise that resolves
+ */
+async function markUserAsNewInChat(chatRef, userId, transaction) {
+  const newSubcollectionRef = chatRef.collection("new").doc(userId);
+  transaction.set(newSubcollectionRef, {
+    seen: false,
+    joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  console.log(`Marked user ${userId} as new in chat ${chatRef.id}`);
+}
+
+/**
+ * Triggered when a new RSVP is accepted, creates/updates chat accordingly.
+ * Also adds the user to the event's 'rsvpedUsers' subcollection.
+ * @type {functions.CloudFunction<admin.firestore.DocumentSnapshot>}
+ */
 exports.onRsvpAccepted = functions.firestore
     .document("live/{eventId}/attendees/{requestId}")
     .onCreate(async (snap, context) => {
@@ -17,7 +41,6 @@ exports.onRsvpAccepted = functions.firestore
       );
 
       try {
-        // 1. Get event details (especially host ID and event name)
         const eventRef = db.collection("live").doc(eventId);
         const eventDoc = await eventRef.get();
 
@@ -28,22 +51,23 @@ exports.onRsvpAccepted = functions.firestore
 
         const eventData = eventDoc.data();
         const hostId = eventData.host;
-        const eventName = eventData.name || `Event ${eventId}`;
+        const eventName = eventData.title || `Event ${eventId}`;
 
         if (!hostId) {
           console.error(`Host ID not found for event ${eventId}`);
           return null;
         }
 
-        // 2. Reference to the chat document for this event
         const chatRef = db.collection("chats").doc(eventId);
+        const rsvpedUserRef = db.collection("live")
+            .doc(eventId)
+            .collection("rsvpedUsers")
+            .doc(rsvpUserId);
 
-        // Use a transaction for atomic updates to the chat document
         await db.runTransaction(async (transaction) => {
           const chatDoc = await transaction.get(chatRef);
 
           if (chatDoc.exists) {
-            // Chat exists, add new participant if needed
             const currentParticipants = chatDoc.data().participants || [];
             if (!currentParticipants.includes(rsvpUserId)) {
               console.log(`Adding ${rsvpUserId} to chat ${eventId}`);
@@ -51,10 +75,13 @@ exports.onRsvpAccepted = functions.firestore
                 participants: admin.firestore.FieldValue.arrayUnion(rsvpUserId),
               });
 
+              await markUserAsNewInChat(chatRef, rsvpUserId, transaction);
+
               const messagesCollectionRef = chatRef.collection("messages");
               transaction.set(messagesCollectionRef.doc(), {
                 senderId: "system",
-                text: `${rsvpUserId} joined the chat.`,
+                text: `${acceptedRequestData.displayFirstName || "A user"} ` +
+                    "joined the chat.",
                 timestamp: admin.firestore.FieldValue.serverTimestamp(),
                 type: "system",
               });
@@ -64,7 +91,6 @@ exports.onRsvpAccepted = functions.firestore
               );
             }
           } else {
-            // Create new chat
             console.log(`Creating new chat ${eventId} for ${eventName}`);
             transaction.set(chatRef, {
               eventId: eventId,
@@ -82,18 +108,30 @@ exports.onRsvpAccepted = functions.firestore
                   admin.firestore.FieldValue.serverTimestamp(),
             });
 
+            await markUserAsNewInChat(chatRef, hostId, transaction);
+            await markUserAsNewInChat(chatRef, rsvpUserId, transaction);
+
             const messagesCollectionRef = chatRef.collection("messages");
             transaction.set(messagesCollectionRef.doc(), {
               senderId: "system",
               text: `Welcome to ${eventName} chat! Only accepted ` +
-                "attendees and host can see this chat.",
+                  "attendees and host can see this chat.",
               timestamp: admin.firestore.FieldValue.serverTimestamp(),
               type: "system",
             });
           }
+
+          transaction.set(rsvpedUserRef, {
+            addedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(
+              `Added user ${rsvpUserId} to live/${eventId}/rsvpedUsers/`,
+          );
         });
 
-        console.log(`Chat update/creation for ${eventId} successful.`);
+        console.log(
+            `Chat and rsvpedUsers update/creation for ${eventId} successful.`,
+        );
         return null;
       } catch (error) {
         console.error("Error in RSVP acceptance:", error);

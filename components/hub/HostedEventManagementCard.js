@@ -1,13 +1,15 @@
+// In your HostedEventManagementCard.js file
+
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList, Image } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '@expo/vector-icons/Ionicons'; // Ensure you have expo/vector-icons installed
 import { LinearGradient } from 'expo-linear-gradient';
-import dayjs from 'dayjs';
+import dayjs from 'dayjs'; // Ensure dayjs is installed: npm install dayjs
 
 const { width } = Dimensions.get('window');
 
 // Helper component to render each user in the horizontal list
-const UserCardItem = ({ user, onPress, showActions, onAccept, onDecline, status, eventId }) => ( // Add eventId prop
+const UserCardItem = ({ user, onPress, showActions, onAccept, onDecline, status }) => (
   <View style={userCardStyles.container}>
     <TouchableOpacity onPress={() => onPress(user.profileInfo)} style={userCardStyles.profileTouchArea}>
       <Image
@@ -22,12 +24,12 @@ const UserCardItem = ({ user, onPress, showActions, onAccept, onDecline, status,
     </TouchableOpacity>
     {showActions && status === 'pending' && (
       <View style={userCardStyles.actionButtons}>
-        <TouchableOpacity style={[userCardStyles.button, userCardStyles.acceptButton]} onPress={() => onAccept(eventId, user.id)}> {/* Pass eventId */}
-          <Ionicons name="checkmark" size={18} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity style={[userCardStyles.button, userCardStyles.declineButton]} onPress={() => onDecline(eventId, user.id)}> {/* Pass eventId */}
-          <Ionicons name="close" size={18} color="#fff" />
-        </TouchableOpacity>
+        <TouchableOpacity style={[userCardStyles.button, userCardStyles.acceptButton]} onPress={() => onAccept(user.id)}>
+          <Ionicons name="checkmark" size={18} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[userCardStyles.button, userCardStyles.declineButton]} onPress={() => onDecline(user.id)}>
+          <Ionicons name="close" size={18} color="#fff" />
+        </TouchableOpacity>
       </View>
     )}
   </View>
@@ -91,6 +93,7 @@ const HostedEventManagementCard = ({
   onDeclineRequest,
   onViewAttendeeProfile,
   onViewEventDetails,
+  onRemoveMeetup, // <--- NEW PROP: Receive the delete function
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('pending');
@@ -172,7 +175,7 @@ const HostedEventManagementCard = ({
                   <Text style={styles.countValue}>{pendingUsers.length}</Text>
                   <Text style={styles.countLabel}>Pending</Text>
                 </View>
-                <View style={styles.countItem}>
+                 <View style={styles.countItem}>
                   <Ionicons name="close-circle-outline" size={16} color="#D9043D" />
                   <Text style={styles.countValue}>{rejectedUsers.length}</Text>
                   <Text style={styles.countLabel}>Rejected</Text>
@@ -181,12 +184,10 @@ const HostedEventManagementCard = ({
             )}
           </View>
 
-          {/* Info Icon (always visible, top right) */}
           <TouchableOpacity onPress={() => onViewEventDetails(event)} style={styles.infoButton}>
             <Ionicons name="information-circle" size={28} color="#FFD700" />
           </TouchableOpacity>
 
-          {/* Toggle Icon (below info icon) */}
           <Ionicons
             name={isExpanded ? "chevron-up" : "chevron-down"}
             size={24}
@@ -195,10 +196,8 @@ const HostedEventManagementCard = ({
           />
         </TouchableOpacity>
 
-        {/* Collapsible Details Section */}
         {isExpanded && (
           <View style={styles.detailsContainer}>
-            {/* Tabs for filtering users */}
             <View style={styles.tabsContainer}>
               <TouchableOpacity
                 style={[styles.tab, activeTab === 'pending' && styles.activeTab]}
@@ -220,27 +219,41 @@ const HostedEventManagementCard = ({
               </TouchableOpacity>
             </View>
 
-            {/* User List based on active tab - NOW HORIZONTAL */}
             <FlatList
-              data={getActiveData()}
-              renderItem={({ item }) => (
-                <UserCardItem
-                      user={item}
-                      onPress={onViewAttendeeProfile}
-                      showActions={activeTab === 'pending'}
-                      onAccept={onAcceptRequest}
-                      onDecline={onDeclineRequest}
-                      status={activeTab}
-                      eventId={event.id}
-                    />
-              )}
-              keyExtractor={(item) => item.id}
-              horizontal={true}
-              showsHorizontalScrollIndicator={false}
-              scrollEnabled={true}
-              ListEmptyComponent={<Text style={styles.emptyListText}>{getEmptyMessage()}</Text>}
-              contentContainerStyle={styles.userHorizontalListContent}
+                horizontal
+                data={getActiveData()}
+                keyExtractor={(user) => user.id}
+                renderItem={({ item: user }) => (
+                    <UserCardItem
+                        user={user}
+                        onPress={onViewAttendeeProfile}
+                        showActions={activeTab === 'pending'}
+                        onAccept={() => onAcceptRequest(event.id, user.id)}
+                        onDecline={() => onDeclineRequest(event.id, user.id)}
+                        status={activeTab} // Pass the activeTab as status to UserCardItem
+                    />
+                )}
+                showsHorizontalScrollIndicator={false}
+                ListEmptyComponent={
+                    <View style={styles.emptyUsersContainer}>
+                        <Text style={styles.emptyUsersText}>{getEmptyMessage()}</Text>
+                    </View>
+                }
+                contentContainerStyle={styles.usersListContainer}
             />
+
+            {/* NEW: Delete Meetup Button */}
+            {onRemoveMeetup && ( // Only render if the prop is provided
+              <TouchableOpacity
+                style={styles.deleteMeetupButton}
+                onPress={() => onRemoveMeetup(event.id)} // Call the function passed from HubScreen
+              >
+                <Ionicons name="trash-outline" size={20} color="white" />
+                <Text style={styles.deleteMeetupButtonText}>Delete Meetup</Text>
+              </TouchableOpacity>
+            )}
+            {/* END NEW: Delete Meetup Button */}
+
           </View>
         )}
       </LinearGradient>
@@ -258,9 +271,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 8,
-    // Set width relative to screen to fill the HubScreen's padded area
-    width: width - (15 * 2), // Full screen width minus HubScreen's paddingHorizontal (15 on left + 15 on right)
-    marginHorizontal: 0, // No internal horizontal margin, rely on HubScreen padding
+    width: width - (15 * 2), // Card takes full width with padding
+    marginHorizontal: 0, // No margin here, padding comes from parent
   },
   gradientBackground: {
     flex: 1,
@@ -271,7 +283,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 15,
-    paddingRight: 80,
+    paddingRight: 80, // Space for the info button and expand icon
   },
   eventImage: {
     width: 75,
@@ -280,7 +292,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   eventInfo: {
-    flex: 1,
+    flex: 1, // Take up remaining space
   },
   eventTitle: {
     fontSize: 18,
@@ -301,22 +313,17 @@ const styles = StyleSheet.create({
   countsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 0, // Increased margin for better spacing
-    flexWrap: 'nowrap',
-    gap: 10, // Increased gap for better spacing between count items
+    marginTop: 0, // No extra margin here
+    flexWrap: 'nowrap', // Prevent wrapping
+    gap: 10, // Space between count items
   },
   countItem: {
-    flexDirection: 'row', // Arrange icon, value, and label in a row
-    alignItems: 'center', // Vertically align items
-    gap: 2, // Space between icon, value, and label
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2, // Space between icon and text
   },
-  countText: { // This style is no longer used directly on the top-level Text elements
-    fontSize: 11,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  countValue: { // New style for the numerical count
-    fontSize: 13, // Slightly larger font size for the number
+  countValue: {
+    fontSize: 13,
     color: '#fff',
     fontWeight: 'bold',
   },
@@ -328,55 +335,80 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 15,
     top: 15,
-    padding: 5,
-    zIndex: 1,
+    padding: 5, // Make touch target larger
+    zIndex: 1, // Ensure it's above other elements
   },
   toggleIcon: {
     position: 'absolute',
     right: 15,
-    top: 50,
+    top: 50, // Adjusted position to be below info button
     padding: 5,
     zIndex: 1,
   },
   detailsContainer: {
     padding: 15,
-    paddingTop: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 0, // Remove top padding as it's handled by padding of parent
+    borderTopWidth: StyleSheet.hairlineWidth, // Thin separator
     borderTopColor: 'rgba(255,255,255,0.2)',
   },
   tabsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.2)', // Slightly transparent black for tabs
     borderRadius: 10,
-    marginBottom: 15,
+    marginBottom: 15, // Space below tabs
     padding: 5,
   },
   tab: {
-    flex: 1,
+    flex: 1, // Distribute tabs evenly
     paddingVertical: 10,
     alignItems: 'center',
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: '#0367A6',
+    backgroundColor: '#0367A6', // Accent color for active tab
   },
   tabText: {
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
   },
-  userHorizontalListContent: {
-    paddingHorizontal: 5,
-    minHeight: 100,
-    alignItems: 'flex-start',
+  emptyUsersContainer: {
+    flex: 1,
+    width: width - (15 * 2) - 30, // Adjust width to match card padding
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 20,
   },
-  emptyListText: {
+  emptyUsersText: {
     color: '#ccc',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    padding: 20,
-    width: '100%',
+    fontSize: 14,
+  },
+  usersListContainer: {
+    paddingVertical: 5, // Padding around the horizontal user list
+    minHeight: 100, // Ensure FlatList has some height even if empty
+    alignItems: 'center', // Center content vertically if few items
+  },
+  // NEW STYLES FOR DELETE BUTTON
+  deleteMeetupButton: {
+    backgroundColor: '#D9043D', // Red color for delete action
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 20, // Space above the button
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+    gap: 8, // Space between icon and text
+  },
+  deleteMeetupButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
-  Text, // Ensure Text is imported
+  Text,
   TouchableOpacity,
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  SafeAreaView, // Though safeArea styles are present, SafeAreaView itself isn't used as the main container
+  SafeAreaView,
   Platform,
+  Alert,
+  StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from 'expo-image';
@@ -24,6 +26,9 @@ import {
   updateDoc,
   serverTimestamp,
   getDocs,
+  setDoc,
+  arrayRemove,
+  deleteDoc,
 } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -55,9 +60,9 @@ const ChatDetailScreen = ({ route, navigation }) => {
   const [isEventDetailsOverlayVisible, setIsEventDetailsOverlayVisible] = useState(false);
   const [chatEventId, setChatEventId] = useState(null);
   const [fetchedEventData, setFetchedEventData] = useState(null);
+  const [eventHostId, setEventHostId] = useState(null); // <--- NEW STATE: To store the event host's UID
   const flatListRef = useRef(null);
 
-  // Early exit if chatId is truly undefined (defensive programming)
   useEffect(() => {
     if (!chatId) {
       console.error("ChatDetailScreen: chatId is undefined. Navigating back.");
@@ -70,8 +75,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
     }
   }, [chatId, navigation]);
 
-
-  // Auth State Listener
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -79,38 +82,48 @@ const ChatDetailScreen = ({ route, navigation }) => {
         console.log("ChatDetailScreen: User authenticated:", user.uid);
       } else {
         setCurrentUserId(null);
-        setMessages([]); // Clear messages if user logs out or session expires
+        setMessages([]);
         console.log("ChatDetailScreen: User not authenticated.");
-        navigation.goBack(); // Go back to previous screen
+        navigation.goBack();
       }
-      setLoading(false); // Authentication state determined, stop loading indicator
+      setLoading(false);
     });
-    return () => unsubscribeAuth(); // Cleanup subscription on unmount
+    return () => unsubscribeAuth();
   }, [navigation]);
 
-  // Mark chat as 'seen' once loaded
   useEffect(() => {
     if (chatId && currentUserId) {
-      const chatDocRef = doc(db, "chats", chatId);
-      getDoc(chatDocRef).then(async (docSnap) => {
-        if (docSnap.exists() && docSnap.data().isNewMatch === true) {
-          console.log(`ChatDetailScreen: Marking chat ${chatId} as not new.`);
+      const userSeenStatusRef = doc(db, "chats", chatId, "new", currentUserId);
+      getDoc(userSeenStatusRef).then(async (docSnap) => {
+        if (docSnap.exists() && docSnap.data().seen === false) {
+          console.log(`ChatDetailScreen: Marking chat ${chatId} as seen for user ${currentUserId}.`);
           try {
-            await updateDoc(chatDocRef, {
-              isNewMatch: false,
+            await updateDoc(userSeenStatusRef, {
+              seen: true,
             });
+            console.log("Successfully updated seen status to true.");
           } catch (error) {
-            console.error("Error updating isNewMatch for chat:", chatId, error);
+            console.error("Error updating seen status for chat:", chatId, "user:", currentUserId, error);
+          }
+        } else if (!docSnap.exists()) {
+          console.log(`ChatDetailScreen: No 'new' status found for chat ${chatId} for user ${currentUserId}. Defensively creating with seen: true.`);
+          try {
+            await setDoc(userSeenStatusRef, {
+              seen: true,
+              joinedAt: serverTimestamp(),
+            }, { merge: true });
+            console.log("Defensively set seen status to true for missing entry.");
+          } catch (error) {
+            console.error("Error defensively setting seen status:", error);
           }
         }
       }).catch(error => {
-        console.error("Error fetching chat for isNewMatch check:", error);
+        console.error("Error fetching user seen status for check:", error);
       });
     }
   }, [chatId, currentUserId]);
 
-
-  // Fetch Chat Details, Participant Info, and Event Header Image/Name
+  // MODIFIED: Fetch Chat Details, Participant Info, Event Header Image/Name, and Event Host ID
   useEffect(() => {
     if (!currentUserId || !chatId) return;
 
@@ -124,18 +137,14 @@ const ChatDetailScreen = ({ route, navigation }) => {
           const participantIds = chatData.participants || [];
           const fetchedInfo = {};
 
-          // --- START FIX ---
-          // Manually add an entry for the "system" sender (Rauxa Admin)
           fetchedInfo["system"] = {
             id: "system",
             displayName: "Rauxa Admin",
             firstName: "Rauxa",
             lastName: "Admin",
-            profileImage: require('../assets/onboarding/Onboarding1.png'), // Corrected path
+            profileImage: require('../assets/onboarding/Onboarding1.png'),
           };
-          // --- END FIX ---
 
-          // Fetch profile info for each participant
           for (const pId of participantIds) {
             if (!fetchedInfo[pId]) {
               const profileRef = doc(db, "users", pId, "ProfileInfo", "userinfo");
@@ -145,8 +154,8 @@ const ChatDetailScreen = ({ route, navigation }) => {
                 fetchedInfo[pId] = {
                   id: pId,
                   displayName: profileData.displayFirstName ||
-                               profileData.name ||
-                               "Unknown User",
+                    profileData.name ||
+                    "Unknown User",
                   firstName: profileData.displayFirstName || "",
                   lastName: profileData.name?.split(' ').length > 1 ? profileData.name.split(' ')[1] : "",
                   profileImage: profileData.profileImages?.[0] || null,
@@ -165,26 +174,32 @@ const ChatDetailScreen = ({ route, navigation }) => {
           setParticipantsInfo(fetchedInfo);
           console.log("ChatDetailScreen: Fetched participants info:", fetchedInfo);
 
-          const eventId = chatData.eventId || initialEventId;
-          setChatEventId(eventId);
-          if (eventId) {
-            const eventRef = doc(db, "live", eventId);
+          const eventIdFromChat = chatData.eventId;
+          const currentEventId = eventIdFromChat || initialEventId;
+          setChatEventId(currentEventId);
+
+          if (currentEventId) {
+            const eventRef = doc(db, "live", currentEventId);
             const eventSnap = await getDoc(eventRef);
             if (eventSnap.exists()) {
               const eventData = eventSnap.data();
               setFetchedEventData(eventData);
-              setHeaderEventName(eventData.title || `Event ${eventId.substring(0, 4)}...`);
+              setHeaderEventName(eventData.title || `Event ${currentEventId.substring(0, 4)}...`);
               if (eventData.photos && eventData.photos.length > 0) {
                 setEventHeaderImageUrl(eventData.photos[0]);
               }
+              setEventHostId(eventData.host); // <--- NEW: Set the event host ID
+              console.log(`ChatDetailScreen: Event host ID for ${currentEventId}: ${eventData.host}`);
             } else {
-              console.warn(`Event ${eventId} not found for chat ${chatId}.`);
+              console.warn(`Event ${currentEventId} not found for chat ${chatId}.`);
               setHeaderEventName("Event Not Found");
               setFetchedEventData(null);
+              setEventHostId(null); // <--- NEW: Clear host ID if event not found
             }
           } else {
             setHeaderEventName(chatData.name || "Direct Chat");
             setFetchedEventData(null);
+            setEventHostId(null); // <--- NEW: Clear host ID for direct chats
           }
 
         } else {
@@ -199,7 +214,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
     fetchData();
   }, [currentUserId, chatId, navigation, initialEventId]);
 
-  // Real-time Messages Listener (Initial Load & New Messages)
   useEffect(() => {
     if (!currentUserId || !chatId) {
       setMessages([]);
@@ -314,9 +328,77 @@ const ChatDetailScreen = ({ route, navigation }) => {
     navigation.navigate('CreateMeetupScreen', { type, eventData });
   };
 
+  const handleLeaveGroupChat = useCallback(() => {
+    Alert.alert(
+      "Leave Chat",
+      "Are you sure you want to leave this chat? You will be removed from the conversation and, if this is an event-related chat, un-RSVP'd from the event.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Leave",
+          onPress: async () => {
+            if (!currentUserId) {
+              Alert.alert("Error", "You must be logged in to leave a chat.");
+              return;
+            }
+            if (!chatId) {
+                Alert.alert("Error", "Chat information is missing.");
+                return;
+            }
+
+            try {
+              // 1. Remove user from chat's participants array
+              const chatDocRef = doc(db, 'chats', chatId);
+              await updateDoc(chatDocRef, {
+                participants: arrayRemove(currentUserId),
+              });
+              console.log(`User ${currentUserId} removed from chat ${chatId} participants.`);
+
+              // 2. Remove user's 'new' status for this chat (cleanup)
+              const userSeenStatusRef = doc(db, "chats", chatId, "new", currentUserId);
+              const userSeenStatusSnap = await getDoc(userSeenStatusRef);
+              if (userSeenStatusSnap.exists()) {
+                await deleteDoc(userSeenStatusRef);
+                console.log(`User ${currentUserId} 'new' status removed for chat ${chatId}.`);
+              }
+
+              // 3. Delete attendee document if eventId exists (from chatEventId state)
+              if (chatEventId) { // Use chatEventId which is derived from chatDoc.eventId
+                const attendeeDocRef = doc(db, 'live', chatEventId, 'attendees', currentUserId);
+                const attendeeSnap = await getDoc(attendeeDocRef);
+                if (attendeeSnap.exists()) {
+                  await deleteDoc(attendeeDocRef);
+                  console.log(`User ${currentUserId} attendee doc deleted for event ${chatEventId}.`);
+                } else {
+                  console.log(`No attendee doc found for ${currentUserId} in event ${chatEventId}.`);
+                }
+              }
+
+              Alert.alert("Success", "You have left the chat.");
+              navigation.goBack();
+            } catch (error) {
+              console.error("Error leaving chat:", error);
+              Alert.alert("Error", `Failed to leave chat: ${error.message || 'An unknown error occurred'}. Please try again.`);
+            }
+          },
+          style: "destructive",
+        },
+      ],
+      { cancelable: true }
+    );
+  }, [chatId, currentUserId, chatEventId, navigation]);
+
+  // Determine if the current user is the host
+  const isCurrentUserHost = currentUserId && eventHostId && currentUserId === eventHostId;
+  const showLeaveButton = !isCurrentUserHost; // Only show if not the host
+
   if (loading || !chatId) {
     return (
-      <LinearGradient colors={["#0367A6", "#003f6b"]} style={styles.container}>
+      <LinearGradient colors={["#0367A6", "#003f6b"]} style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFD700" />
         <Text style={styles.loadingText}>Loading chat...</Text>
       </LinearGradient>
     );
@@ -328,10 +410,11 @@ const ChatDetailScreen = ({ route, navigation }) => {
       style={[styles.container, { paddingBottom: insets.bottom + 10 }]}
     >
       {/* Chat Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0) + 15 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFD700" />
         </TouchableOpacity>
+
         {eventHeaderImageUrl && (
           <Image
             source={{ uri: eventHeaderImageUrl }}
@@ -339,7 +422,8 @@ const ChatDetailScreen = ({ route, navigation }) => {
             contentFit="cover"
           />
         )}
-        <Text style={styles.headerTitle}>{headerEventName}</Text> {/* This is correctly wrapped */}
+        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.headerTitle}>{headerEventName}</Text>
+
         <TouchableOpacity
           onPress={() => setIsEventDetailsOverlayVisible(true)}
           style={styles.infoButton}
@@ -352,6 +436,15 @@ const ChatDetailScreen = ({ route, navigation }) => {
         >
           <Ionicons name="people" size={28} color="#FFD700" />
         </TouchableOpacity>
+        {/* MODIFIED: Conditionally render the Leave Chat Button */}
+        {showLeaveButton && (
+          <TouchableOpacity
+            onPress={handleLeaveGroupChat}
+            style={styles.leaveChatButton}
+          >
+            <Ionicons name="exit" size={24} color="#D9043D" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Messages List */}
@@ -360,7 +453,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          // IMPORTANT: MessageBubble must ensure all its internal text is wrapped in <Text>
           <MessageBubble
             message={item}
             currentUserId={currentUserId}
@@ -381,7 +473,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
       />
 
       {/* Message Input Component */}
-      {/* IMPORTANT: MessageInput component must ensure any text it displays (e.g., placeholder, button text) is wrapped in <Text> */}
       <MessageInput
         value={newMessageText}
         onChangeText={setNewMessageText}
@@ -390,8 +481,7 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
       {/* Participants Dropdown as a View, positioned absolutely */}
       {isParticipantsDropdownVisible && (
-        <View style={styles.dropdownPosition}>
-          {/* IMPORTANT: ParticipantsDropdown must ensure all its internal text is wrapped in <Text> */}
+        <View style={[styles.dropdownPosition, { top: insets.top + (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0) + 70 }]}>
           <ParticipantsDropdown
             onClose={() => setIsParticipantsDropdownVisible(false)}
             participants={Object.values(participantsInfo)}
@@ -401,7 +491,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
       {/* Event Details Overlay (conditionally rendered) */}
       {isEventDetailsOverlayVisible && chatEventId && (
-        // IMPORTANT: EventDetailsOverlay must ensure all its internal text is wrapped in <Text>
         <EventDetailsOverlay
           eventId={chatEventId}
           onClose={() => setIsEventDetailsOverlayVisible(false)}
@@ -419,23 +508,29 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 30 : 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0367A6',
   },
   loadingText: {
     fontSize: 18,
     color: '#fff',
     textAlign: 'center',
-    marginTop: 50,
+    marginTop: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingVertical: 15,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.1)',
     marginBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.1)',
   },
   headerImage: {
     width: 40,
@@ -445,27 +540,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#ddd',
   },
   backButton: {
-    padding: 8,
+    paddingRight: 10,
   },
   infoButton: {
-    padding: 8,
-    marginLeft: 'auto',
-    marginRight: 5,
+    paddingHorizontal: 5,
   },
   participantsButton: {
-    padding: 8,
+    paddingHorizontal: 5,
+    marginRight: 10,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
     flex: 1,
     textAlign: 'left',
+    marginRight: 10,
+  },
+  leaveChatButton: {
+    paddingHorizontal: 5,
+    paddingVertical: 5,
   },
   messagesList: {
     flex: 1,
   },
   messagesContentContainer: {
+    paddingHorizontal: 16,
     paddingBottom: 10,
     paddingTop: 10,
   },
@@ -477,7 +577,6 @@ const styles = StyleSheet.create({
   },
   dropdownPosition: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? 90 : 110,
     right: 16,
     zIndex: 1000,
   },

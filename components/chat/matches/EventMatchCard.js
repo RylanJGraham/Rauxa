@@ -5,11 +5,12 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native'; 
 /**
  * A card component to display a new event match.
  * @param {object} props - The component props.
- * @param {object} props.event - The event object containing id, title, and image.
+ * @param {object} props.event - The event object containing id, title, image, and isNewMatch.
  * @param {function} props.onPress - Callback function when the card is pressed.
  */
 const EventMatchCard = ({ event, onPress }) => {
   const imageUrl = event.image || "https://placehold.co/100x100/0367A6/ffffff?text=Event"; // Fallback image URL
+  const isNew = event.isNewMatch; // Access the isNewMatch property
 
   return (
     <TouchableOpacity style={styles.card} onPress={() => onPress(event.id, event.title, event.eventId)}>
@@ -21,6 +22,13 @@ const EventMatchCard = ({ event, onPress }) => {
         onLoad={() => console.log("EventMatchCard Image loaded successfully")}
       />
       <Text style={styles.title} numberOfLines={2}>{event.title}</Text>
+
+      {/* "NEW" Indicator */}
+      {isNew && (
+        <View style={styles.newBadge}>
+          <Text style={styles.newBadgeText}>NEW</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 };
@@ -40,6 +48,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    position: 'relative', // Needed for absolute positioning of the badge
   },
   image: {
     width: 60,
@@ -53,6 +62,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  newBadge: {
+    position: 'absolute',
+    top: 5, // Adjust positioning as needed
+    right: 5, // Adjust positioning as needed
+    backgroundColor: '#D9043D', // Red background for "NEW"
+    borderRadius: 10, // Rounded corners for the badge
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    zIndex: 1, // Ensure it's above other content
+  },
+  newBadgeText: {
+    color: '#FFFFFF', // White text for "NEW"
+    fontSize: 8, // Smaller font size
+    fontWeight: 'bold',
   },
 });
 

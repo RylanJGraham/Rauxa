@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableWithoutFeedback, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -9,6 +9,9 @@ const { width, height } = Dimensions.get('screen');
 
 const EventCard = ({ event, isSwiping }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
+  // State to store the height of the infoOverlay
+  const [infoOverlayHeight, setInfoOverlayHeight] = useState(0);
+
   const dotCount = event.photos.length;
   const dotWidth = (width - dotCount * 8) / dotCount;
 
@@ -28,6 +31,12 @@ const EventCard = ({ event, isSwiping }) => {
     }
   };
 
+  // Callback function to get the layout of the infoOverlay
+  const onInfoOverlayLayout = useCallback((event) => {
+    const { height } = event.nativeEvent.layout;
+    setInfoOverlayHeight(height);
+  }, []);
+
   const currentImage = event.photos?.[currentIndex];
   const attendeeImages = event.attendees?.map(att => att.profileImages?.[0]).filter(Boolean) || [];
 
@@ -42,17 +51,11 @@ const EventCard = ({ event, isSwiping }) => {
   });
 
   // Calculate the top position for other overlays (host, attendees, tags)
-  const otherOverlayTopPosition = Platform.select({
-    android: androidStatusBarHeight + 144,
-    ios: 184,
-    default: 210
-  });
+  // This will now dynamically adjust based on infoOverlayHeight
+  const otherOverlayTopPosition = infoOverlayHeight + 20; // 20 is a small margin below the infoOverlay
 
-  const paginationTopPosition = Platform.select({
-    android: androidStatusBarHeight + 124,
-    ios: 164,
-    default: 180
-  });
+  // The pagination indicators should always be just below the top container
+  const paginationTopPosition = infoOverlayHeight + 4; // 10 is a small margin
 
   return (
     <View style={styles.container}>
@@ -74,6 +77,7 @@ const EventCard = ({ event, isSwiping }) => {
           { paddingTop: infoOverlayContentPaddingTop },
           { borderRadius: styles.container.borderRadius },
         ]}
+        onLayout={onInfoOverlayLayout} // Add onLayout prop here
       >
         {/* Top Row */}
         <View style={styles.topRow}>
@@ -84,7 +88,6 @@ const EventCard = ({ event, isSwiping }) => {
         </View>
 
         {/* Bottom Row */}
-        {/* Changed justifyContent to 'space-between' and adjusted padding */}
         <View style={styles.bottomRow}>
           {/* Location */}
           <View style={styles.locationContainer}>
@@ -93,7 +96,7 @@ const EventCard = ({ event, isSwiping }) => {
               onPress={() => {
                 const query = encodeURIComponent(event.location);
                 // Corrected Google Maps URL for direct search
-                const url = `https://www.google.com/maps/search/?api=1&query=$${query}`; // Corrected template literal
+                const url = `https://www.google.com/maps/search/?api=1&query=${query}`;
                 Linking.openURL(url);
               }}
             >
@@ -125,68 +128,75 @@ const EventCard = ({ event, isSwiping }) => {
       </LinearGradient>
 
       {/* Other Overlays: Host, Attendees, Tags */}
-      {currentIndex === 0 ? (
-        <View style={[styles.hostOverlay, { top: otherOverlayTopPosition }]}>
-          <Image
-            source={{ uri: event.hostInfo?.profileImages?.[0] || 'https://via.placeholder.com/150' }}
-            style={styles.hostCircle}
-            resizeMode="cover"
-          />
-          <View style={styles.hostInfo}>
-            <Text style={styles.hostedBy}>Hosted by:</Text>
-            <Text style={styles.hostName}>{event.hostInfo?.name || 'Unknown'}</Text>
+      {/* Only render these if infoOverlayHeight is determined to prevent initial jump */}
+      {infoOverlayHeight > 0 && (
+        currentIndex === 0 ? (
+          <View style={[styles.hostOverlay, { top: otherOverlayTopPosition }]}>
+            <Image
+              source={{ uri: event.hostInfo?.profileImages?.[0] || 'https://via.placeholder.com/150' }}
+              style={styles.hostCircle}
+              resizeMode="cover"
+            />
+            <View style={styles.hostInfo}>
+              <Text style={styles.hostedBy}>Hosted by:</Text>
+              <Text style={styles.hostName}>{event.hostInfo?.name || 'Unknown'}</Text>
+            </View>
           </View>
-        </View>
-      ) : currentIndex === 2 ? (
-        <View style={[styles.tagsOverlay, { top: otherOverlayTopPosition }]}>
-          <View style={styles.tagsContainer}>
-            {(event.tags || []).map((tag, i) => (
-              <View key={i} style={styles.tag}>
-                <Text style={styles.tagText}>{tag}</Text>
-              </View>
-            ))}
+        ) : currentIndex === 2 ? (
+          <View style={[styles.tagsOverlay, { top: otherOverlayTopPosition }]}>
+            <View style={styles.tagsContainer}>
+              {(event.tags || []).map((tag, i) => (
+                <View key={i} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
-      ) : (
-        <View style={[styles.attendeesOverlay, { top: otherOverlayTopPosition }]}>
-          <View style={styles.attendeeCircles}>
-            {attendeeImages.slice(0, 5).map((uri, index) => (
-              <Image
-                key={index}
-                source={{ uri }}
-                style={[
-                  styles.attendeeCircle,
-                  {
-                    left: index * 26,
-                    zIndex: 5 - index,
-                  },
-                ]}
-                resizeMode="cover"
-              />
-            ))}
+        ) : (
+          <View style={[styles.attendeesOverlay, { top: otherOverlayTopPosition }]}>
+            <View style={styles.attendeeCircles}>
+              {attendeeImages.slice(0, 5).map((uri, index) => (
+                <Image
+                  key={index}
+                  source={{ uri }}
+                  style={[
+                    styles.attendeeCircle,
+                    {
+                      left: index * 26,
+                      zIndex: 5 - index,
+                    },
+                  ]}
+                  resizeMode="cover"
+                />
+              ))}
+            </View>
+            <View style={styles.hostInfo}>
+              <Text style={styles.hostedBy}>Attended by:</Text>
+              <Text style={styles.hostName}>x{attendeeImages.length} People</Text>
+            </View>
           </View>
-          <View style={styles.hostInfo}>
-            <Text style={styles.hostedBy}>Attended by:</Text>
-            <Text style={styles.hostName}>x{attendeeImages.length} People</Text>
-          </View>
-        </View>
+        )
       )}
 
+
       {/* Moved pagination here and adjusted its top position */}
-      <View style={[styles.pagination, { top: paginationTopPosition }]}>
-        {event.photos.map((_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.dot,
-              {
-                width: dotWidth,
-                backgroundColor: currentIndex === index ? '#D9043D' : '#D9043D40',
-              },
-            ]}
-          />
-        ))}
-      </View>
+      {/* Only render pagination if infoOverlayHeight is determined */}
+      {infoOverlayHeight > 0 && (
+        <View style={[styles.pagination, { top: paginationTopPosition }]}>
+          {event.photos.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.dot,
+                {
+                  width: dotWidth,
+                  backgroundColor: currentIndex === index ? '#D9043D' : '#D9043D40',
+                },
+              ]}
+            />
+          ))}
+        </View>
+      )}
     </View>
   );
 };
@@ -207,12 +217,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    paddingLeft: 0, // Keep these at 0, as bottomRow will handle padding
-    paddingRight: 0, // Keep these at 0, as bottomRow will handle padding
+    paddingLeft: 0,
+    paddingRight: 0,
     paddingBottom: 14,
     zIndex: 10,
     alignItems: 'center',
-
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
@@ -246,7 +255,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'flex-start',
     marginBottom: 4,
-    paddingHorizontal: 20, // Keep padding here for title/description
+    paddingHorizontal: 20,
     width: '100%',
   },
   description: {
@@ -259,11 +268,10 @@ const styles = StyleSheet.create({
   },
   bottomRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between', // Keeps elements at far ends
-    width: '100%', // Ensure it takes full width to apply space-between effectively
-    paddingHorizontal: 20, // Add padding here to create space from the sides
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 20,
     alignItems: 'center',
-    // Removed gap: 24 as space-between will handle spacing
   },
   dateContainer: {
     flexDirection: 'row',

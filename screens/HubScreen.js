@@ -11,9 +11,9 @@ import {
   Dimensions,
   Platform,
   StatusBar,
-  Image, // Import Image component
+  Image,
 } from 'react-native';
-import { db, auth } from '../firebase'; // Assuming correct path to firebase config
+import { db, auth } from '../firebase';
 import {
   collection,
   query,
@@ -30,18 +30,16 @@ import {
 import { onAuthStateChanged } from 'firebase/auth';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import RsvpEventCard from '../components/hub/RsvpEventCard'; // Ensure correct path
-import HostedEventManagementCard from '../components/hub/HostedEventManagementCard'; // Ensure correct path
-import ProfileGalleryOverlay from '../components/hub/ProfileGalleryOverlay'; // Ensure correct path
-import LiveEventDetailsModal from '../components/hub/LiveEventDetailsModal'; // Ensure correct path
+import RsvpEventCard from '../components/hub/RsvpEventCard';
+import HostedEventManagementCard from '../components/hub/HostedEventManagementCard';
+import ProfileGalleryOverlay from '../components/hub/ProfileGalleryOverlay';
+import LiveEventDetailsModal from '../components/hub/LiveEventDetailsModal';
 
-// Assuming you have theme files for colors, spacing, typography
-// If not, replace these with your actual color/spacing values or define them directly.
 const colors = {
   background: '#1a1a1a',
   cardBackground: '#333333',
-  primary: '#0367A6', // Example Blue
-  secondary: '#D9043D', // Example Red/Accent
+  primary: '#0367A6',
+  secondary: '#D9043D',
   text: '#FFFFFF',
   textSecondary: '#CCCCCC',
 };
@@ -53,8 +51,8 @@ const spacing = {
   xl: 32,
 };
 const typography = {
-  regular: 'System', // Replace with your font family, e.g., 'Inter_400Regular'
-  bold: 'System',    // Replace with your font family, e.g., 'Inter_700Bold'
+  regular: 'System',
+  bold: 'System',
 };
 
 const { width, height: screenHeight } = Dimensions.get('window');
@@ -62,9 +60,12 @@ const { width, height: screenHeight } = Dimensions.get('window');
 const HubScreen = ({ navigation }) => {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [rsvpsLoading, setRsvpsLoading] = useState(true); // New loading state for RSVPs
+  const [hostedEventsLoading, setHostedEventsLoading] = useState(true); // New loading state for hosted events
+
   const [userRsvps, setUserRsvps] = useState([]);
   const [hostedEventsWithUsers, setHostedEventsWithUsers] = useState([]);
-  const unsubscribeRefs = useRef([]);
+  const unsubscribeRefs = useRef([]); // Used for hosted event subcollection listeners
 
   const [showProfileGalleryOverlay, setShowProfileGalleryOverlay] = useState(false);
   const [selectedProfileForGallery, setSelectedProfileForGallery] = useState(null);
@@ -72,137 +73,257 @@ const HubScreen = ({ navigation }) => {
   const [isLiveEventDetailsModalVisible, setIsLiveEventDetailsModalVisible] = useState(false);
   const [selectedLiveEventId, setSelectedLiveEventId] = useState(null);
 
+  // --- Combined Loading State Effect ---
+  // This effect ensures overall `loading` is true as long as any individual data fetch is pending
+  useEffect(() => {
+    setLoading(rsvpsLoading || hostedEventsLoading);
+  }, [rsvpsLoading, hostedEventsLoading]);
+
   // --- Auth State Listener ---
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setUserId(user ? user.uid : null);
-      // We don't set loading to false here, as data fetching needs to complete first.
-      // setLoading(false); // This will be set after all data is fetched.
     });
     return unsubscribeAuth;
   }, []);
 
-  useEffect(() => {
-  if (!userId) {
-    setUserRsvps([]);
-    setLoading(false); // Ensure loading is false if no user
-    return;
-  }
+  // --- Handle Accept Request --- (Keep your existing logic, ensuring it updates RSVP status)
+  const handleAcceptRequest = useCallback(async (eventId, userIdToUpdate) => {
+    if (!userId) { Alert.alert("Error", "Host user not authenticated."); return; }
 
-  const rsvpCollectionRef = collection(db, 'users', userId, 'rsvp');
-  const activeRsvpListeners = new Map(); // To store unsubscribe functions for each event's attendee status
+    // References for the documents to be updated/deleted
+    const userRsvpRef = doc(db, 'users', userIdToUpdate, 'rsvp', eventId);
+    const eventPendingRef = doc(db, 'live', eventId, 'pending', userIdToUpdate);
+    const eventAttendeesRef = doc(db, 'live', eventId, 'attendees', userIdToUpdate);
 
-  const unsubscribeRsvps = onSnapshot(rsvpCollectionRef, async (rsvpSnapshot) => {
-    // Collect all event IDs from the current RSVP snapshot
-    const currentRsvpEventIds = new Set(rsvpSnapshot.docs.map(doc => doc.id));
+    try {
+      await runTransaction(db, async (transaction) => {
+        // Get the pending request document
+        const pendingDoc = await transaction.get(eventPendingRef);
+        if (!pendingDoc.exists()) {
+          throw new Error("User not found in pending requests for this event.");
+        }
+        const userData = pendingDoc.data();
 
-    // Cleanup listeners for events that are no longer in the RSVP list
-    activeRsvpListeners.forEach((unsub, eventId) => {
-      if (!currentRsvpEventIds.has(eventId)) {
-        unsub(); // Unsubscribe if event is no longer present
-        activeRsvpListeners.delete(eventId);
-      }
-    });
-
-    const fetchedRsvpsPromises = rsvpSnapshot.docs.map(async (rsvpDoc) => {
-      const eventId = rsvpDoc.id;
-      const rsvpData = rsvpDoc.data();
-
-      const eventRef = doc(db, 'live', eventId);
-      const eventSnap = await getDoc(eventRef); // Still a getDoc here, but event details don't change as frequently as RSVP status.
-
-      if (!eventSnap.exists()) {
-        console.warn(`RSVP event ${eventId} not found in 'live' collection. Removing stale RSVP.`);
-        // await deleteDoc(doc(db, 'users', userId, 'rsvp', eventId)); // Consider uncommenting this for data cleanliness
-        return null; // Skip this RSVP
-      }
-      const eventDetails = { id: eventId, ...eventSnap.data() };
-
-      const attendeeRef = doc(db, 'live', eventId, 'attendees', userId);
-
-      // Set up or update the listener for this specific attendee's status
-      if (activeRsvpListeners.has(eventId)) {
-        // If a listener already exists, it means the status will be updated via its callback
-        // For now, we'll return a placeholder and let the listener handle the actual state update.
-        // This is a common pattern when nesting snapshots.
-        // Alternatively, you could immediately fetch the current status here and then let the listener
-        // update it again if it changes later.
-        const existingRsvp = userRsvps.find(r => r.eventId === eventId);
-        return existingRsvp || { ...rsvpData, eventId, eventDetails, isAccepted: false }; // Placeholder
-      }
-
-      // If no listener exists, create one
-      const unsubscribeAttendee = onSnapshot(attendeeRef, (attendeeSnap) => {
-        const isAccepted = attendeeSnap.exists();
-        setUserRsvps(prevRsvps => {
-          const updatedRsvps = prevRsvps.map(rsvp =>
-            rsvp.eventId === eventId
-              ? { ...rsvp, isAccepted: isAccepted }
-              : rsvp
-          );
-          // If this is a new RSVP being added to the list
-          if (!updatedRsvps.some(rsvp => rsvp.eventId === eventId)) {
-            return [...updatedRsvps, { ...rsvpData, eventId, eventDetails, isAccepted }];
-          }
-          return updatedRsvps;
+        // 1. Move from 'pending' to 'attendees' subcollection
+        transaction.set(eventAttendeesRef, {
+          ...userData,
+          acceptedAt: serverTimestamp() // Add a timestamp for when they were accepted
         });
-      }, (error) => {
-        console.error(`Error listening to attendee status for event ${eventId}:`, error);
+        // 2. Delete from 'pending' subcollection
+        transaction.delete(eventPendingRef);
+
+        // 3. Update the user's personal RSVP document status to 'accepted'
+        transaction.update(userRsvpRef, { status: 'accepted', lastUpdated: serverTimestamp() });
       });
-      activeRsvpListeners.set(eventId, unsubscribeAttendee); // Store the unsubscribe function
+      Alert.alert("Success", "User request accepted. Chat will be updated shortly.");
+    } catch (error) {
+      console.error("Error accepting request:", error);
+      Alert.alert("Error", `Failed to accept request: ${error.message || 'An unknown error occurred'}`);
+    }
+  }, [userId]);
 
-      // For the initial pass, fetch the status immediately
-      const isAccepted = (await getDoc(attendeeRef)).exists();
-      return {
-        ...rsvpData,
-        eventId: eventId,
-        eventDetails: eventDetails,
-        isAccepted: isAccepted,
-      };
-    });
 
-    const resolvedRsvps = (await Promise.all(fetchedRsvpsPromises)).filter(Boolean);
-    setUserRsvps(resolvedRsvps);
-    setLoading(false);
-  }, (error) => {
-    console.error('Error listening to user RSVPs:', error);
-    setLoading(false);
-  });
+  // --- Handle Decline Request --- (Keep your existing logic, ensuring it updates RSVP status)
+  const handleDeclineRequest = useCallback(async (eventId, userIdToUpdate) => {
+    if (!userId) { Alert.alert("Error", "Host user not authenticated."); return; }
 
-  // Cleanup all listeners when the component unmounts or userId changes
-  return () => {
-    unsubscribeRsvps();
-    activeRsvpListeners.forEach(unsub => unsub());
-  };
-}, [userId]); // Dependency array, re-run if userId changes
+    // References for the documents to be updated/deleted
+    const userRsvpRef = doc(db, 'users', userIdToUpdate, 'rsvp', eventId);
+    const eventPendingRef = doc(db, 'live', eventId, 'pending', userIdToUpdate);
+    const eventDeclinedRef = doc(db, 'live', eventId, 'declined', userIdToUpdate);
 
-  // --- Fetch Hosted Events ---
-  useEffect(() => {
+    try {
+      await runTransaction(db, async (transaction) => {
+        // Get the pending request document
+        const pendingDoc = await transaction.get(eventPendingRef);
+        if (!pendingDoc.exists()) {
+          throw new Error("User not found in pending requests for this event.");
+        }
+        const userData = pendingDoc.data();
+
+        // 1. Move from 'pending' to 'declined' subcollection
+        transaction.set(eventDeclinedRef, {
+          ...userData,
+          declinedAt: serverTimestamp() // Add a timestamp for when they were declined
+        });
+        // 2. Delete from 'pending' subcollection
+        transaction.delete(eventPendingRef);
+
+        // 3. Update the user's personal RSVP document status to 'rejected'
+        transaction.update(userRsvpRef, { status: 'rejected', lastUpdated: serverTimestamp() });
+      });
+      Alert.alert("Success", "User request declined.");
+    } catch (error) {
+      console.error("Error declining request:", error);
+      Alert.alert("Error", `Failed to decline request: ${error.message || 'An unknown error occurred'}`);
+    }
+  }, [userId]);
+
+
+  // --- NEW/UPDATED: Handle Delete Meetup ---
+  const handleDeleteMeetup = useCallback(async (eventId) => {
     if (!userId) {
-      setHostedEventsWithUsers([]); // Clear hosted events if user logs out
-      // If userId is null on initial load, ensure overall loading state is handled.
-      if (!auth.currentUser && !loading) setLoading(false);
+      Alert.alert("Error", "You must be logged in to delete meetups.");
       return;
     }
 
-    // Clear previous listeners to avoid memory leaks
+    Alert.alert(
+      "Delete Meetup",
+      "Are you sure you want to permanently delete this meetup and all associated data (attendees, chat, user RSVPs)? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const eventRef = doc(db, 'live', eventId);
+              const eventSnap = await getDoc(eventRef);
+
+              if (!eventSnap.exists()) {
+                Alert.alert("Error", "Meetup not found or already deleted. UI will refresh.");
+                // Immediately remove from UI if it's already gone from Firestore
+                // This is an optimistic update that we'll reinforce with the onSnapshot listener
+                setHostedEventsWithUsers(prevEvents => prevEvents.filter(e => e.id !== eventId));
+                return;
+              }
+
+              const eventData = eventSnap.data();
+              if (eventData.host !== userId) {
+                Alert.alert("Permission Denied", "You are not the host of this meetup and cannot delete it.");
+                return;
+              }
+
+              console.log(`[HubScreen] Attempting to delete live event document: live/${eventId}`);
+              await deleteDoc(eventRef); // This triggers the Cloud Function
+
+              console.log(`[HubScreen] Successfully initiated delete for live event: ${eventId}`);
+              Alert.alert("Meetup Deletion Initiated", "The meetup and all its data are being removed. This may take a moment.");
+
+              // OPTIMISTIC UI UPDATE: Remove the card immediately from the host's view.
+              // This is crucial for responsiveness. The onSnapshot will confirm/correct this.
+              setHostedEventsWithUsers(prevEvents => prevEvents.filter(e => e.id !== eventId));
+
+            } catch (error) {
+              console.error("[HubScreen] Client-side error deleting meetup:", error);
+              if (error.code) { // Firebase specific error codes
+                Alert.alert("Error Deleting Meetup", `Firebase Error (${error.code}): ${error.message}`);
+              } else {
+                Alert.alert("Error Deleting Meetup", `An unexpected error occurred: ${error.message}`);
+              }
+            }
+          }
+        }
+      ],
+      { cancelable: true }
+    );
+  }, [userId]);
+  // --- END UPDATED: Handle Delete Meetup ---
+
+
+  // --- Fetch User RSVPs ---
+  useEffect(() => {
+    if (!userId) {
+      setUserRsvps([]);
+      setRsvpsLoading(false);
+      return;
+    }
+
+    const rsvpCollectionRef = collection(db, 'users', userId, 'rsvp');
+    const unsubscribeRsvps = onSnapshot(rsvpCollectionRef, async (rsvpSnapshot) => {
+      const fetchedRsvps = [];
+      const eventPromises = [];
+
+      for (const rsvpDoc of rsvpSnapshot.docs) {
+        const eventId = rsvpDoc.id;
+        const rsvpData = rsvpDoc.data();
+        const rsvpStatus = rsvpData.status || 'pending'; // Default status
+
+        const eventRef = doc(db, 'live', eventId);
+        eventPromises.push(
+          getDoc(eventRef).then(eventSnap => {
+            if (!eventSnap.exists()) {
+              console.warn(`[HubScreen] RSVP event ${eventId} not found in 'live' collection. Removing stale RSVP.`);
+              // If the event itself is gone, the user's RSVP doc should be removed too.
+              // This ensures cleanup of stale RSVPs on client side.
+              deleteDoc(doc(db, 'users', userId, 'rsvp', eventId)).catch(err => {
+                console.error(`[HubScreen] Error auto-deleting stale RSVP for ${eventId}:`, err);
+              });
+              return null; // Don't add this RSVP to the list
+            }
+            const eventDetails = { id: eventId, ...eventSnap.data() };
+            return {
+              ...rsvpData,
+              eventId: eventId,
+              eventDetails: eventDetails,
+              isAccepted: rsvpStatus === 'accepted', // Based on the 'status' field in RSVP doc
+              status: rsvpStatus,
+            };
+          }).catch(error => {
+            console.error(`[HubScreen] Error fetching event details for RSVP ${eventId}:`, error);
+            return null; // Skip if there's an error fetching event details
+          })
+        );
+      }
+
+      const resolvedRsvps = await Promise.all(eventPromises);
+      setUserRsvps(resolvedRsvps.filter(Boolean)); // Filter out any nulls from failed fetches
+      setRsvpsLoading(false);
+    }, (error) => {
+      console.error('[HubScreen] Error listening to user RSVPs:', error);
+      Alert.alert("Error", "Failed to load your RSVPs.");
+      setRsvpsLoading(false);
+    });
+
+    return () => unsubscribeRsvps(); // Cleanup on unmount
+  }, [userId]);
+
+
+  // --- UPDATED: Fetch Hosted Events ---
+  useEffect(() => {
+    if (!userId) {
+      setHostedEventsWithUsers([]);
+      setHostedEventsLoading(false);
+      return;
+    }
+
+    // Clear previous subcollection listeners to avoid memory leaks
     unsubscribeRefs.current.forEach(unsub => unsub());
     unsubscribeRefs.current = [];
 
     const hostedEventsQuery = query(collection(db, 'live'), where('host', '==', userId));
 
+    // Main listener for hosted events
     const unsubscribeHostedEvents = onSnapshot(hostedEventsQuery, async (snapshot) => {
       const currentUnsubscribes = [];
-      const profileCache = new Map(); // Cache profiles to avoid redundant fetches
+      const profileCache = new Map(); // Cache user profiles
+      
+      // We will build the new state here
+      const newHostedEventsMap = new Map();
 
-      // Create a map of events from the main query first
-      const eventsMap = new Map();
-      snapshot.forEach(eventDoc => {
-        eventsMap.set(eventDoc.id, {
-          id: eventDoc.id,
-          ...eventDoc.data(),
+      // First, iterate through the *entire* snapshot to get the latest state of events
+      for (const docSnapshot of snapshot.docs) {
+        const eventId = docSnapshot.id;
+        const eventData = {
+          id: eventId,
+          ...docSnapshot.data(),
           users: { pending: [], accepted: [], rejected: [] } // Initialize user arrays
-        });
+        };
+        newHostedEventsMap.set(eventId, eventData);
+      }
+
+      // Cleanup subcollection listeners for events that are no longer in the main snapshot
+      // This handles cases where an event was removed from the main query
+      unsubscribeRefs.current = unsubscribeRefs.current.filter(item => {
+        if (!newHostedEventsMap.has(item.eventId)) {
+          item.unsub(); // Unsubscribe if the event is no longer in the hosted events list
+          return false; // Remove from our ref list
+        }
+        return true; // Keep
       });
 
       // Function to get profile info from cache or fetch and cache
@@ -246,162 +367,96 @@ const HubScreen = ({ navigation }) => {
         return info;
       };
 
-      // Attach listeners for subcollections (pending, attendees, declined) for each event
-      for (const [eventId, eventData] of eventsMap.entries()) {
-        const attachSubcollectionListener = (subcollectionName, statusType) => {
-          const q = collection(db, 'live', eventId, subcollectionName);
-          const unsubscribe = onSnapshot(q, (subSnapshot) => {
-            subSnapshot.docChanges().forEach(async (change) => {
-              const userId = change.doc.id;
-              const profileInfo = await getProfileInfo(userId);
-              if (!profileInfo) {
-                console.warn(`ProfileInfo not found for user ${userId}. Skipping.`);
-                return;
-              }
-              const userData = {
-                id: userId,
-                ...change.doc.data(),
-                profileInfo, // Merged profile data
-                status: statusType // 'pending', 'accepted', 'rejected'
-              };
-
-              // Update the state based on changes within subcollections
-              setHostedEventsWithUsers(prevEvents => {
-                const newEvents = prevEvents.map(e => {
-                  if (e.id === eventId) {
-                    let currentUsers = e.users[statusType];
-                    if (change.type === 'added') {
-                      if (!currentUsers.some(u => u.id === userId)) {
-                        return { ...e, users: { ...e.users, [statusType]: [...currentUsers, userData] } };
-                      }
-                    } else if (change.type === 'modified') {
-                      return { ...e, users: { ...e.users, [statusType]: currentUsers.map(u => u.id === userId ? userData : u) } };
-                    } else if (change.type === 'removed') {
-                      return { ...e, users: { ...e.users, [statusType]: currentUsers.filter(u => u.id !== userId) } };
-                    }
-                  }
-                  return e;
-                });
-                // If the event itself was just added and is not yet in `newEvents`, add it with the user data.
-                // This scenario handles initial population for newly added hosted events.
-                if (!newEvents.some(e => e.id === eventId) && eventsMap.has(eventId)) {
-                    const initialEvent = { ...eventData, users: { pending: [], accepted: [], rejected: [] } };
-                    initialEvent.users[statusType].push(userData);
-                    return [...newEvents, initialEvent];
+      // Attach or re-attach listeners for subcollections (pending, attendees, declined) for each event
+      for (const [eventId, eventData] of newHostedEventsMap.entries()) {
+        const existingUnsubForEvent = unsubscribeRefs.current.find(item => item.eventId === eventId);
+        
+        // Only attach subcollection listeners if we don't already have one for this event
+        if (!existingUnsubForEvent) {
+          const attachSubcollectionListener = (subcollectionName, statusType) => {
+            const q = collection(db, 'live', eventId, subcollectionName);
+            const unsubscribe = onSnapshot(q, (subSnapshot) => {
+              subSnapshot.docChanges().forEach(async (change) => {
+                // IMPORTANT: Before processing, check if the parent event still exists in our current map
+                if (!newHostedEventsMap.has(eventId)) {
+                  console.warn(`[HubScreen] Subcollection change for event ${eventId} but parent event no longer exists. Skipping.`);
+                  return; // Don't process if parent event is gone
                 }
-                return newEvents;
-              });
-            });
-          }, (error) => console.error(`Error listening to ${subcollectionName} for ${eventId}:`, error));
-          currentUnsubscribes.push(unsubscribe);
-        };
 
-        attachSubcollectionListener('pending', 'pending');
-        attachSubcollectionListener('attendees', 'accepted');
-        attachSubcollectionListener('declined', 'rejected');
+                const userId = change.doc.id;
+                const profileInfo = await getProfileInfo(userId);
+                if (!profileInfo) {
+                  console.warn(`[HubScreen] ProfileInfo not found for user ${userId}. Skipping.`);
+                  return;
+                }
+                const userData = {
+                  id: userId,
+                  ...change.doc.data(),
+                  profileInfo, // Merged profile data
+                  status: statusType // 'pending', 'accepted', 'rejected'
+                };
+
+                // Update the state using a functional update, being careful with nested state
+                setHostedEventsWithUsers(prevEvents => {
+                  const updatedEvents = prevEvents.map(e => {
+                    if (e.id === eventId) {
+                      let updatedUsers = { ...e.users }; // Shallow copy of the users object
+
+                      // Filter out the user from all lists first to ensure uniqueness
+                      updatedUsers.pending = updatedUsers.pending.filter(u => u.id !== userId);
+                      updatedUsers.accepted = updatedUsers.accepted.filter(u => u.id !== userId);
+                      updatedUsers.rejected = updatedUsers.rejected.filter(u => u.id !== userId);
+
+                      if (change.type === 'added' || change.type === 'modified') {
+                        // Add the user to the correct status list
+                        updatedUsers[statusType] = [...updatedUsers[statusType], userData];
+                      }
+                      // For 'removed' type, the user would already be filtered out above.
+                      return { ...e, users: updatedUsers };
+                    }
+                    return e;
+                  });
+                  return updatedEvents;
+                });
+              });
+            }, (error) => console.error(`[HubScreen] Error listening to ${subcollectionName} for ${eventId}:`, error));
+            
+            currentUnsubscribes.push({ eventId, unsub: unsubscribe }); // Store the new listener
+          };
+
+          // Attach subcollection listeners
+          attachSubcollectionListener('pending', 'pending');
+          attachSubcollectionListener('attendees', 'accepted');
+          attachSubcollectionListener('declined', 'rejected');
+        }
       }
 
-      // Set initial hosted events (without subcollection users yet, which will populate async)
-      setHostedEventsWithUsers(Array.from(eventsMap.values()));
-      // Store subcollection unsubscribe functions
-      unsubscribeRefs.current = currentUnsubscribes;
-      setLoading(false); // Set overall loading to false after initial hosted events are fetched
+      // Finally, set the hosted events based on the main snapshot's current state
+      // This update should effectively "reset" or confirm the state after any main document changes
+      // The individual subcollection listeners will then layer on top of this.
+      setHostedEventsWithUsers(Array.from(newHostedEventsMap.values()));
+      
+      // Update the global unsubscribeRefs to include all currently active listeners
+      unsubscribeRefs.current = currentUnsubscribes; // Replaces previous list with new ones
+      setHostedEventsLoading(false); // Set overall loading to false after initial hosted events are fetched
     }, (error) => {
-      console.error("Error listening to hosted events query:", error);
-      setLoading(false); // Also set loading to false on error
+      console.error("[HubScreen] Error listening to hosted events query:", error);
+      Alert.alert("Error", "Failed to load your hosted events.");
+      setHostedEventsLoading(false); // Also set loading to false on error
     });
 
     return () => {
       // Unsubscribe from main hosted events query and all subcollection listeners
       unsubscribeHostedEvents();
-      unsubscribeRefs.current.forEach(unsub => unsub());
+      unsubscribeRefs.current.forEach(item => item.unsub());
       unsubscribeRefs.current = [];
     };
-  }, [userId]);
-
-  // --- Event Management Handlers ---
-  const handleAcceptRequest = useCallback(async (eventId, requestId) => {
-    console.log("handleAcceptRequest called with eventId:", eventId, "requestId:", requestId);
-    const rsvpUserId = requestId;
-    if (!userId) { Alert.alert("Error", "Host user not authenticated."); return; }
-
-    try {
-      const eventRef = doc(db, "live", eventId);
-      const eventDoc = await getDoc(eventRef);
-      if (!eventDoc.exists()) { Alert.alert("Error", "Event not found for this request."); return; }
-      const eventData = eventDoc.data();
-      const hostId = eventData.host;
-      if (userId !== hostId) { Alert.alert("Permission Denied", "You are not the host of this event and cannot accept requests."); return; }
-
-      const pendingRef = doc(db, 'live', eventId, 'pending', requestId);
-      const attendeeRef = doc(db, 'live', eventId, 'attendees', requestId);
-
-      let pendingRequestData = null;
-      try {
-        const pendingDocSnap = await getDoc(pendingRef);
-        if (!pendingDocSnap.exists()) { Alert.alert("Error", "The RSVP request to be accepted does not exist."); return; }
-        pendingRequestData = pendingDocSnap.data();
-      } catch (fetchError) {
-        console.error("Error fetching pending request data:", fetchError);
-        Alert.alert("Error", "Failed to retrieve pending request data.");
-        return;
-      }
-
-      await runTransaction(db, async (transaction) => {
-        const transactionPendingDoc = await transaction.get(pendingRef);
-        if (!transactionPendingDoc.exists()) { throw new Error("Pending request no longer exists, transaction aborted."); }
-        transaction.set(attendeeRef, { ...pendingRequestData, acceptedAt: serverTimestamp() });
-        transaction.delete(pendingRef);
-      });
-      Alert.alert("Success", "RSVP request accepted. Chat will be updated shortly.");
-    } catch (error) {
-      console.error('Client-side handleAcceptRequest failed:', error);
-      Alert.alert("Error", `Failed to accept request: ${error.message || 'An unknown error occurred'}. Please try again.`);
-    }
-  }, [userId]);
+  }, [userId]); // Dependency array, re-run if userId changes
 
 
-  const handleDeclineRequest = useCallback(async (eventId, requestId) => {
-    const rsvpUserId = requestId;
-    if (!userId) { Alert.alert("Error", "Host user not authenticated."); return; }
-
-    try {
-      const eventRef = doc(db, "live", eventId);
-      const eventDoc = await getDoc(eventRef);
-      if (!eventDoc.exists()) { Alert.alert("Error", "Event not found for this request."); return; }
-      const eventData = eventDoc.data();
-      const hostId = eventData.host;
-      if (userId !== hostId) { Alert.alert("Permission Denied", "You are not the host of this event and cannot decline requests."); return; }
-
-      const pendingRef = doc(db, 'live', eventId, 'pending', requestId);
-      const declinedRef = doc(db, 'live', eventId, 'declined', requestId);
-
-      let pendingRequestData = null;
-      try {
-        const pendingDocSnap = await getDoc(pendingRef);
-        if (!pendingDocSnap.exists()) { Alert.alert("Error", "The RSVP request to be declined does not exist."); return; }
-        pendingRequestData = pendingDocSnap.data();
-      } catch (fetchError) {
-        console.error("Error fetching pending request data for decline:", fetchError);
-        Alert.alert("Error", "Failed to retrieve pending request data.");
-        return;
-      }
-
-      await runTransaction(db, async (transaction) => {
-        const transactionPendingDoc = await transaction.get(pendingRef);
-        if (!transactionPendingDoc.exists()) { throw new Error("Pending request no longer exists, transaction aborted."); }
-        transaction.set(declinedRef, { ...pendingRequestData, declinedAt: serverTimestamp() });
-        transaction.delete(pendingRef);
-      });
-      Alert.alert("Success", "RSVP request declined.");
-    } catch (error) {
-      console.error('Client-side handleDeclineRequest failed:', error);
-      Alert.alert("Error", `Failed to decline request: ${error.message || 'An unknown error occurred'}. Please try again.`);
-    }
-  }, [userId]);
-
+  // --- Event Management Handlers (your existing ones) ---
   const handleRsvpCardPress = useCallback((item) => {
-    Alert.alert("Your RSVP Event", `You RSVP'd to: ${item.eventDetails.title}\nStatus: ${item.isAccepted ? 'Accepted' : 'Pending...'}`);
+    Alert.alert("Your RSVP Event", `You RSVP'd to: ${item.eventDetails.title}\nStatus: ${item.status === 'accepted' ? 'Accepted' : 'Pending...'}`);
   }, []);
 
   const handleInfoPress = useCallback((eventData) => {
@@ -453,18 +508,13 @@ const HubScreen = ({ navigation }) => {
 
   return (
     <LinearGradient colors={["#34394C", "#000"]} style={styles.fullScreenContainer}>
-      {/* The ScrollView's style property controls the ScrollView container itself. */}
-      {/* Its contentContainerStyle controls the View that wraps all its children. */}
       <ScrollView contentContainerStyle={styles.scrollViewContentContainer}>
-        {/* THIS IS THE CRUCIAL WRAPPER VIEW for all your content */}
-        {/* It ensures all content stacks from the top and flexGrow handles remaining space. */}
         <View style={styles.contentWrapper}>
-          {/* Rauxa Hub Image */}
           <View style={styles.imageContainer}>
             <Image
-              source={require('../assets/RAUXAHub.png')} // Your image path
+              source={require('../assets/RAUXAHub.png')} // Make sure this path is correct
               style={styles.rauxaHubImage}
-              resizeMode="contain" // Ensures the whole image is visible within its bounds
+              resizeMode="contain"
             />
           </View>
 
@@ -496,12 +546,10 @@ const HubScreen = ({ navigation }) => {
           />
 
           {/* Your Hosted Events Section */}
-          {/* Apply sectionHeader styles, then add the specific margin for hosted events */}
           <View style={[styles.sectionHeader, styles.hostedEventsSectionHeader]}>
             <Text style={styles.sectionTitleText}>Meetups Your Hosting</Text>
             <Text style={styles.sectionCount}>({hostedEventsWithUsers.length} Events)</Text>
           </View>
-          {/* Render HostedEventManagementCards vertically stacked */}
           <View style={styles.hostedEventsListVertical}>
             {hostedEventsWithUsers.length > 0 ? (
               hostedEventsWithUsers.map((item) => (
@@ -515,6 +563,7 @@ const HubScreen = ({ navigation }) => {
                   onDeclineRequest={handleDeclineRequest}
                   onViewAttendeeProfile={handleViewAttendeeProfile}
                   onViewEventDetails={() => handleInfoPress(item)}
+                  onRemoveMeetup={handleDeleteMeetup} // Pass the new delete function
                 />
               ))
             ) : (
@@ -569,17 +618,17 @@ const styles = StyleSheet.create({
     // No horizontal padding here. Put it on the contentWrapper.
   },
   contentWrapper: { // This is the new wrapper View *inside* the ScrollView
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + spacing.medium : spacing.large * 1.5,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + spacing.medium : spacing.large * 2.4,
     paddingHorizontal: spacing.medium, // Apply overall horizontal padding here to all content
   },
-  // --- Header Image (Rauxa Hub) ---
   imageContainer: {
-    alignSelf: 'flex-start', // Keeps the image container left-aligned
+    alignSelf: 'flex-start', // Align the image to the start (left)
+    marginBottom: spacing.medium, // Space below the image
   },
   rauxaHubImage: {
-    width: 200, // Adjust width as needed
-    height: 50, // Adjust height as needed
-    // The image itself should handle transparency, so no background gradient needed here.
+    width: 200, // Adjust as needed
+    height: 50, // Adjust as needed
+    resizeMode: 'contain',
   },
   // --- Section Headers (Your RSVPs and Your Hosted Events) ---
   sectionHeader: {
@@ -637,7 +686,7 @@ const styles = StyleSheet.create({
   // --- Bottom Padding ---
   bottomPadding: {
     height: Platform.OS === 'ios' ? 110 : 120, // Adjust this based on your bottom navigation bar's height
-                                                // to ensure content scrolls above it.
+                                            // to ensure content scrolls above it.
   },
 });
 
