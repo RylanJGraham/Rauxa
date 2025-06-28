@@ -1,23 +1,31 @@
-import React, { useState } from 'react'; // Added useState for the toggle
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Linking, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Application from 'expo-application'; // For app version
-import { auth, db, storage } from "../../firebase"; // Ensure firebase.js exports storage
+import * as Application from 'expo-application';
+import { auth, db, storage } from "../../firebase";
 import { doc, deleteDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { ref, deleteObject, listAll } from "firebase/storage";
 import { reauthenticateWithCredential, EmailAuthProvider, deleteUser } from "firebase/auth";
 
-const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigation prop if needed
-    const appVersion = Application.nativeApplicationVersion || "N/A"; // Or use Constants.manifest.version in Expo Go
-    const [pushNotificationsEnabled, setPushNotificationsEnabled] = useState(true); // Theoretical toggle state
+const SettingsModal = ({ isVisible, onClose, navigation }) => {
+    const appVersion = Application.nativeApplicationVersion || "N/A";
+    const [pushNotificationsEnabled, setPushNotificationsEnabled] = useState(true);
 
-    // Function to handle opening app settings (for permissions)
     const openAppSettings = () => {
         Linking.openSettings();
     };
 
-    // --- Start: handleDeleteAccount function (from previous response) ---
+    // Modified handleDeleteAccount to show "soon" message for now
     const handleDeleteAccount = async () => {
+        // This will now just show an alert indicating the feature is coming soon
+        Alert.alert(
+            "Account Deletion",
+            "The account deletion feature will be implemented soon.",
+            [{ text: "OK" }]
+        );
+
+        // Keep the original detailed logic commented out below if you want to re-enable it later
+        /*
         const user = auth.currentUser;
 
         if (!user) {
@@ -36,37 +44,23 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
                 {
                     text: "Delete Account",
                     onPress: async () => {
-                        // In a real app, you MUST re-authenticate if auth.currentUser.metadata.lastSignInTime is too old.
-                        // Example: Prompt user for password then call reauthenticateWithCredential(user, credential);
-                        // For simplicity in this theoretical example, we're skipping explicit reauth prompt,
-                        // but it's crucial for production.
-
                         try {
-                            // 1. Delete user's Firestore data: `users/{uid}/ProfileInfo/userinfo`
                             const userProfileRef = doc(db, "users", user.uid, "ProfileInfo", "userinfo");
                             await deleteDoc(userProfileRef);
                             console.log("Firestore profile data deleted.");
 
-                            // 2. Delete user's Firebase Storage images: `profilePics/{userid}/`
                             const profilePicsRef = ref(storage, `profilePics/${user.uid}`);
                             const fileList = await listAll(profilePicsRef);
-
-                            // Delete each file in the folder
                             const deletePromises = fileList.items.map(itemRef => deleteObject(itemRef));
                             await Promise.all(deletePromises);
                             console.log("Storage profile pictures deleted.");
 
-                            // 3. Delete the Firebase Authentication user account
                             await deleteUser(user);
                             console.log("Firebase Auth user deleted.");
 
                             Alert.alert("Account Deleted", "Your account and all associated data have been permanently deleted.");
-                            onClose(); // Close the modal
-                            // Navigate user to signup/login screen after successful deletion
-                            // If using React Navigation, you might do:
+                            onClose();
                             // navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
-                            // Ensure 'navigation' prop is passed to SettingsModal if you use it.
-
                         } catch (error) {
                             console.error("Error deleting account:", error);
                             if (error.code === 'auth/requires-recent-login') {
@@ -80,8 +74,8 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
                 }
             ]
         );
+        */
     };
-    // --- End: handleDeleteAccount function ---
 
     return (
         <Modal
@@ -93,18 +87,20 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
             <View style={styles.centeredView}>
                 <View style={styles.modalView}>
                     <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                        <Ionicons name="close-circle" size={30} color="#666" />
+                        <Ionicons name="close-circle" size={30} color="#999" />
                     </TouchableOpacity>
 
                     <Text style={styles.modalTitle}>Settings</Text>
 
-                    {/* Added showsVerticalScrollIndicator={false} prop */}
                     <ScrollView style={styles.settingsScroll} showsVerticalScrollIndicator={false}>
                         {/* Account Section */}
                         <Text style={styles.sectionTitle}>Account</Text>
-                        <TouchableOpacity style={styles.settingItem} onPress={() => Alert.alert("Change Password", "Feature to change password will be here.")}>
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            onPress={() => Alert.alert("Change Password", "The change password feature will be implemented soon.")} // Changed alert message
+                        >
                             <Text style={styles.settingText}>Change Password</Text>
-                            <Ionicons name="chevron-forward" size={20} color="#555" />
+                            <Ionicons name="chevron-forward" size={20} color="#BBB" />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.settingItem} onPress={handleDeleteAccount}>
                             <Text style={[styles.settingText, styles.deleteText]}>Delete Account</Text>
@@ -115,12 +111,17 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
                         <Text style={styles.sectionTitle}>Notifications</Text>
                         <View style={styles.settingItem}>
                             <Text style={styles.settingText}>Push Notifications</Text>
-                            {/* Visual toggle only */}
-                            <TouchableOpacity onPress={() => setPushNotificationsEnabled(!pushNotificationsEnabled)}>
+                            {/* Visual toggle only, onPress shows "soon" message */}
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setPushNotificationsEnabled(!pushNotificationsEnabled);
+                                    Alert.alert("Push Notifications", "The push notification settings will be implemented soon.");
+                                }}
+                            >
                                 <Ionicons
                                     name={pushNotificationsEnabled ? "toggle-sharp" : "toggle-outline"}
                                     size={35}
-                                    color={pushNotificationsEnabled ? "#0367A6" : "#CCC"}
+                                    color={pushNotificationsEnabled ? "#0367A6" : "#777"} // Adjusted color for contrast
                                 />
                             </TouchableOpacity>
                         </View>
@@ -129,21 +130,20 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
                         <Text style={styles.sectionTitle}>Privacy & Permissions</Text>
                         <TouchableOpacity style={styles.settingItem} onPress={openAppSettings}>
                             <Text style={styles.settingText}>Location Permissions</Text>
-                            <Ionicons name="open-outline" size={20} color="#555" />
+                            <Ionicons name="open-outline" size={20} color="#BBB" />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.settingItem} onPress={openAppSettings}>
                             <Text style={styles.settingText}>Image/Camera Permissions</Text>
-                            <Ionicons name="open-outline" size={20} color="#555" />
+                            <Ionicons name="open-outline" size={20} color="#BBB" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL('https://rauxa-landing.vercel.app/privacy-policy.html')}> {/* Assuming a privacy policy page */}
+                        <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL('https://rauxa-landing.vercel.app/privacy-policy.html')}>
                             <Text style={styles.settingText}>Privacy Policy</Text>
-                            <Ionicons name="document-text-outline" size={20} color="#555" />
+                            <Ionicons name="document-text-outline" size={20} color="#BBB" />
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL('https://rauxa-landing.vercel.app/terms-of-service.html')}> {/* Assuming a TOS page */}
+                        <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL('https://rauxa-landing.vercel.app/terms-of-service.html')}>
                             <Text style={styles.settingText}>Terms of Service</Text>
-                            <Ionicons name="document-text-outline" size={20} color="#555" />
+                            <Ionicons name="document-text-outline" size={20} color="#BBB" />
                         </TouchableOpacity>
-
 
                         {/* Support & Information Section */}
                         <Text style={styles.sectionTitle}>Support & Information</Text>
@@ -153,11 +153,11 @@ const SettingsModal = ({ isVisible, onClose, navigation }) => { // Added navigat
                         </View>
                         <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL('https://rauxa-landing.vercel.app/')}>
                             <Text style={styles.settingText}>Visit our Website</Text>
-                            <Ionicons name="globe-outline" size={20} color="#555" />
+                            <Ionicons name="globe-outline" size={20} color="#BBB" />
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL('https://mail.google.com/mail/u/6/')}>
                             <Text style={styles.settingText}>Email Support</Text>
-                            <Ionicons name="mail-outline" size={20} color="#555" />
+                            <Ionicons name="mail-outline" size={20} color="#BBB" />
                         </TouchableOpacity>
                         <View style={styles.settingItem}>
                             <Text style={styles.settingText}>Licenses & Attributions</Text>
@@ -177,11 +177,11 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: 'rgba(0,0,0,0.6)', // Semi-transparent overlay
+        backgroundColor: 'rgba(0,0,0,0.6)', // Semi-transparent overlay for the modal background
     },
     modalView: {
         margin: 20,
-        backgroundColor: "white",
+        backgroundColor: "black", // Changed to black
         borderRadius: 20,
         padding: 25,
         alignItems: "center",
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
         marginBottom: 20,
-        color: '#333',
+        color: 'white', // Changed to white
     },
     settingsScroll: {
         width: '100%',
@@ -214,11 +214,11 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#0367A6', // Blue section title
+        color: '#82C0FF', // Lighter blue for better contrast on black
         marginTop: 15,
         marginBottom: 10,
-        alignSelf: 'flex-start', // Align title to left within scrollview
-        paddingLeft: 5, // Small padding for alignment
+        alignSelf: 'flex-start',
+        paddingLeft: 5,
     },
     settingItem: {
         flexDirection: 'row',
@@ -227,21 +227,21 @@ const styles = StyleSheet.create({
         width: '100%',
         paddingVertical: 12,
         paddingHorizontal: 5,
-        borderBottomWidth: StyleSheet.hairlineWidth, // Use hairline width for subtle line
-        borderBottomColor: '#eee',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#444', // Darker border for black background
     },
     settingText: {
         fontSize: 16,
-        color: '#333',
-        flex: 1, // Allows text to take available space
+        color: 'white', // Changed to white
+        flex: 1,
     },
     settingValue: {
         fontSize: 16,
-        color: '#666',
+        color: '#CCC', // Lighter grey for values
         textAlign: 'right',
     },
     deleteText: {
-        color: '#D9043D', // Red text for delete action
+        color: '#D9043D', // Red text for delete action, remains the same
         fontWeight: 'bold',
     },
 });

@@ -1,99 +1,131 @@
 import React from 'react';
-import { View, Text, StyleSheet, Animated, Image, Dimensions } from 'react-native'; // Import Image
-import { Feather } from '@expo/vector-icons'; // Keep if you still use it elsewhere, otherwise can remove
-import WaveIcon from '../../assets/matching/wave.png'; // Import your WaveIcon
-import NoIcon from '../../assets/matching/No.png';  // Import your NoIcon
+import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
+import WaveIcon from '../../assets/matching/wave.png'; // Make sure paths are correct
+import NoIcon from '../../assets/matching/No.png';   // Make sure paths are correct
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window'); // Get full width AND height
 
 const SwipeOverlay = ({ translateX }) => {
-  const startFadeDistance = width / 6;
-
-  const opacityLeft = translateX.interpolate({
-    inputRange: [-startFadeDistance * 2, -startFadeDistance],
-    outputRange: [0.8, 0],
+  // Background opacity for "NO" (red) - increases as you swipe left
+  const rejectBgOpacity = translateX.interpolate({
+    inputRange: [-width / 2, 0], // From -width/2 (full opacity) to 0 (transparent)
+    outputRange: [0.7, 0], // Max opacity 0.7 for background to still see content
     extrapolate: 'clamp',
   });
 
-  const scaleLeft = translateX.interpolate({
-    inputRange: [-width, -width / 6],
-    outputRange: [1, 0.7],
+  // Background opacity for "YES" (blue) - increases as you swipe right
+  const acceptBgOpacity = translateX.interpolate({
+    inputRange: [0, width / 2], // From 0 (transparent) to width/2 (full opacity)
+    outputRange: [0, 0.7], // Max opacity 0.7 for background
     extrapolate: 'clamp',
   });
 
-  const opacityRight = translateX.interpolate({
-    inputRange: [startFadeDistance, startFadeDistance * 2],
-    outputRange: [0, 0.8],
+  // Opacity for the "NO" indicator (icon and text)
+  const rejectOpacity = translateX.interpolate({
+    inputRange: [-width / 4, 0], // Fades in when swiping left
+    outputRange: [1, 0],
     extrapolate: 'clamp',
   });
 
-  const scaleRight = translateX.interpolate({
-    inputRange: [width / 6, width],
-    outputRange: [0.7, 1],
+  // Scale for "NO" indicator
+  const rejectScale = translateX.interpolate({
+    inputRange: [-width / 2, -width / 4, 0],
+    outputRange: [1.2, 1, 0.8], // Slightly scales up as it becomes more visible
+    extrapolate: 'clamp',
+  });
+
+  // Opacity for the "YES" indicator (icon and text)
+  const acceptOpacity = translateX.interpolate({
+    inputRange: [0, width / 4], // Fades in when swiping right
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  // Scale for "YES" indicator
+  const acceptScale = translateX.interpolate({
+    inputRange: [0, width / 4, width / 2],
+    outputRange: [0.8, 1, 1.2], // Slightly scales up as it becomes more visible
     extrapolate: 'clamp',
   });
 
   return (
-    <>
-      {/* Left Swipe Overlay (Decline) */}
+    <View style={styles.overlayContainer} pointerEvents="none">
+      {/* Full-screen animated background for NO (red) */}
       <Animated.View
-        pointerEvents="none"
         style={[
-          styles.overlay,
-          // Set background color to D9043D with 0.8 opacity
-          { backgroundColor: '#D9043D80', opacity: opacityLeft },
+          styles.fullScreenBg,
+          { backgroundColor: '#34394C', opacity: rejectBgOpacity }, // <--- Changed background color here
+        ]}
+      />
+      {/* Full-screen animated background for YES (blue) */}
+      <Animated.View
+        style={[
+          styles.fullScreenBg,
+          { backgroundColor: 'rgba(52, 152, 219, 0.5)', opacity: acceptBgOpacity },
+        ]}
+      />
+
+      {/* "NO" Indicator (centered, only its opacity and scale animate) */}
+      <Animated.View
+        style={[
+          styles.indicatorCentered,
+          { opacity: rejectOpacity, transform: [{ scale: rejectScale }, { translateX: -60 }, { translateY: -60 }] },
         ]}
       >
-        <Animated.View style={[styles.content, { transform: [{ scale: scaleLeft }] }]}>
-          {/* Use the NoIcon PNG */}
-          <Image source={NoIcon} style={styles.overlayIcon} resizeMode="contain" />
-          {/* Change text to "Decline" */}
-          <Text style={styles.text}>Decline</Text>
-        </Animated.View>
+        <Image source={NoIcon} style={styles.indicatorImage} contentFit="contain" />
+        <Text style={styles.indicatorText}>NO</Text>
       </Animated.View>
 
-      {/* Right Swipe Overlay (RSVP) */}
+      {/* "YES" Indicator (centered, only its opacity and scale animate) */}
       <Animated.View
-        pointerEvents="none"
         style={[
-          styles.overlay,
-          // Set background color to D9B779 with 0.8 opacity
-          { backgroundColor: '#D9B77980', opacity: opacityRight },
+          styles.indicatorCentered,
+          { opacity: acceptOpacity, transform: [{ scale: acceptScale }, { translateX: -60 }, { translateY: -60 }] },
         ]}
       >
-        <Animated.View style={[styles.content, { transform: [{ scale: scaleRight }] }]}>
-          {/* Use the WaveIcon PNG */}
-          <Image source={WaveIcon} style={styles.overlayIcon} resizeMode="contain" />
-          {/* Change text to "RSVP" */}
-          <Text style={styles.text}>RSVP</Text>
-        </Animated.View>
+        <Image source={WaveIcon} style={styles.indicatorImage} contentFit="contain" />
+        <Text style={styles.indicatorText}>YES</Text>
       </Animated.View>
-    </>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  overlayContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
-    width,
-    height,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+  },
+  fullScreenBg: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  indicatorCentered: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 120,
+    height: 120,
+    borderRadius: 10,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  content: {
-    alignItems: 'center',
+  indicatorImage: {
+    width: 50,
+    height: 50,
+    marginBottom: 8,
   },
-  text: {
+  indicatorText: {
     color: 'white',
-    fontSize: 36,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginTop: 10,
-  },
-  overlayIcon: { // New style for your PNG icons
-    width: 80, // Adjust as needed
-    height: 80, // Adjust as needed
   },
 });
 

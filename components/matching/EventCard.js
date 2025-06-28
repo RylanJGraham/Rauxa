@@ -95,7 +95,7 @@ const EventCard = ({ event, isSwiping }) => {
               style={styles.locationWrapper}
               onPress={() => {
                 const query = encodeURIComponent(event.location);
-                // Corrected Google Maps URL for direct search
+                // CORRECTED LINE HERE:
                 const url = `https://www.google.com/maps/search/?api=1&query=${query}`;
                 Linking.openURL(url);
               }}
@@ -387,46 +387,6 @@ const styles = StyleSheet.create({
     height: 5,
     borderRadius: 3,
     marginHorizontal: 4,
-  },
-  activeDot: {
-    width: 48,
-    backgroundColor: '#D9043D',
-  },
-  inactiveDot: {
-    width: 48,
-    backgroundColor: '#D9043D',
-  },
-  tagsOverlay: {
-    position: 'absolute',
-    right: 0,
-    padding: 12,
-    backgroundColor: 'transparent',
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-    flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 4.65,
-    elevation: 8,
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 2,
-  },
-  tag: {
-    backgroundColor: '#0367A6',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginLeft: 4,
-    marginBottom: 2,
-  },
-  tagText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold'
   },
 });
 

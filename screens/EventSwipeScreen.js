@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, Dimensions, Text, TouchableOpacity, Animated, Easing, PanResponder, Platform, StatusBar } from 'react-native';
 import { Image } from 'expo-image';
-import { collection, doc, setDoc, onSnapshot, getDocs, query, where } from 'firebase/firestore'; // Import query and where
+import { collection, doc, setDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LinearGradient } from 'expo-linear-gradient';
 import EventCard from '../components/matching/EventCard';
 import SwipeOverlay from '../components/matching/SwipeOverlay';
-import WaveIcon from '../assets/matching/wave.png';
-import NoIcon from '../assets/matching/No.png';
+import WaveIcon from '../assets/matching/wave.png'; // Make sure paths are correct
+import NoIcon from '../assets/matching/No.png';   // Make sure paths are correct
 import { onAuthStateChanged } from 'firebase/auth';
 import { serverTimestamp } from 'firebase/firestore';
 
@@ -19,6 +19,25 @@ const EventSwipeScreen = () => {
   const translateX = useRef(new Animated.Value(0)).current;
   const [currentUserId, setCurrentUserId] = useState(null);
 
+  // Refs to store the *latest* state values for PanResponder and other callbacks to access
+  const eventsRef = useRef([]);
+  const eventIndexRef = useRef(0);
+  const currentUserIdRef = useRef(null); // New ref for currentUserId
+
+  // Use useEffects to keep refs updated with state
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
+  useEffect(() => {
+    eventIndexRef.current = eventIndex;
+  }, [eventIndex]);
+
+  useEffect(() => { // Keep currentUserIdRef updated
+    currentUserIdRef.current = currentUserId;
+  }, [currentUserId]);
+
+
   // useRef to hold the set of event IDs the user has already seen (RSVP'd or declined)
   const seenEventIdsRef = useRef(new Set());
 
@@ -27,6 +46,9 @@ const EventSwipeScreen = () => {
   const setIsSwiping = (value) => {
     isSwipingRef.current = value;
   };
+
+  // New ref to hold the current event *being swiped*
+  const swipingEventRef = useRef(null);
 
   const rotate = translateX.interpolate({
     inputRange: [-width, 0, width],
@@ -58,14 +80,6 @@ const EventSwipeScreen = () => {
       // Add to seenEventIdsRef immediately on successful swipe
       seenEventIdsRef.current.add(currentEventData.id);
 
-      // Filter out the swiped event from the current state immediately
-      setEvents(prevEvents => prevEvents.filter(event => event.id !== currentEventData.id));
-      setEventIndex(prev => {
-        // If we swiped the last event, ensure index doesn't go out of bounds
-        return prev >= (events.length - 1) ? 0 : prev; // Reset to 0 if no more or stay at current for next
-      });
-
-
       if (direction === 'right') {
         // Add user to event's pending list
         const attendeeRef = doc(db, 'live', currentEventData.id, 'pending', userId);
@@ -78,18 +92,24 @@ const EventSwipeScreen = () => {
       }
     } catch (error) {
       console.error(`Firestore operation failed:`, error);
-      // Optional: If swipe logic fails, you might want to revert the UI changes or show an error.
-      // For now, we'll let it stay swiped if it visually disappeared.
     }
   };
 
-  const handleSwipeAnimationAndLogic = (direction) => {
-    const currentEvent = events[eventIndex];
-    if (!currentEvent || !currentUserId) {
-      console.log("No current event or user ID available to perform swipe.");
+  // Modified: handleSwipeAnimationAndLogic now explicitly takes userId as an argument
+  const handleSwipeAnimationAndLogic = useCallback(async (direction, eventToSwipe, userIdToSwipeWith) => {
+    // Use the explicitly passed userId, or fall back to the ref if needed
+    const actualUserId = userIdToSwipeWith || currentUserIdRef.current;
+
+    if (!eventToSwipe || !actualUserId) {
+      console.log("No event or user ID available to perform swipe animation and logic. eventToSwipe:", eventToSwipe ? eventToSwipe.id : 'None', "actualUserId:", actualUserId);
+      // Ensure state is reset even if logic fails
+      translateX.setValue(0);
+      setIsSwiping(false);
+      swipingEventRef.current = null;
       return;
     }
 
+    setIsSwiping(true);
     const toValue = direction === 'left' ? -width * 1.5 : width * 1.5;
 
     Animated.timing(translateX, {
@@ -99,35 +119,62 @@ const EventSwipeScreen = () => {
       useNativeDriver: true,
     }).start(async () => {
       // Perform logic AFTER animation completes
-      await performSwipeLogic(direction, currentEvent, currentUserId);
+      await performSwipeLogic(direction, eventToSwipe, actualUserId); // Use actualUserId here
+
+      // Filter out the swiped event from the current state immediately
+      setEvents(prevEvents => prevEvents.filter(event => event.id !== eventToSwipe.id));
       translateX.setValue(0); // Reset position for the next card
-
-      // Note: setEventIndex is handled within performSwipeLogic now for immediate UI update.
+      setIsSwiping(false); // End swiping state after logic and animation
+      swipingEventRef.current = null; // Clear the swiping event ref
     });
-  };
+  }, [performSwipeLogic]); // currentUserId is no longer a direct dependency, we pass it or use its ref
 
-  const handleSwipe = useCallback((direction) => {
-    handleSwipeAnimationAndLogic(direction);
-  }, [events, eventIndex, currentUserId]); // Depend on events, eventIndex, currentUserId
+  const handleButtonSwipe = useCallback((direction) => {
+    // Use eventsRef.current and eventIndexRef.current for latest values
+    const eventToSwipe = eventsRef.current[eventIndexRef.current];
+    if (eventToSwipe && currentUserIdRef.current) { // Ensure currentUserId is also available
+      handleSwipeAnimationAndLogic(direction, eventToSwipe, currentUserIdRef.current);
+    } else {
+      console.log("No current event or user ID available for button swipe.");
+    }
+  }, [handleSwipeAnimationAndLogic]);
 
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dx) > 10,
       onPanResponderGrant: () => {
         translateX.stopAnimation();
-        setIsSwiping(true);
+        console.log('[onPanResponderGrant] Attempting to grab event...');
+        // Use the refs to get the latest state values
+        const currentEvents = eventsRef.current;
+        const currentEventIndex = eventIndexRef.current;
+
+        console.log('[onPanResponderGrant] Events at grant (from ref):', currentEvents.length, 'Event Index at grant (from ref):', currentEventIndex);
+        if (currentEvents[currentEventIndex]) {
+          swipingEventRef.current = currentEvents[currentEventIndex];
+          setIsSwiping(true);
+          console.log('[onPanResponderGrant] Event captured:', swipingEventRef.current.id);
+        } else {
+          console.log("No event to start swiping on. Events state (from ref):", currentEvents);
+          swipingEventRef.current = null;
+        }
       },
       onPanResponderMove: (_, gestureState) => {
-        if (events[eventIndex]) { // Only allow move if there's a card
+        if (swipingEventRef.current) {
           translateX.setValue(gestureState.dx);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        setIsSwiping(false);
+        console.log('[onPanResponderRelease] Releasing swipe...');
+        console.log('[onPanResponderRelease] swipingEventRef.current:', swipingEventRef.current ? swipingEventRef.current.id : 'None');
+        const eventBeingSwiped = swipingEventRef.current;
+        const currentUserIdAtRelease = currentUserIdRef.current; // Get currentUserId from ref at time of release
 
-        if (!events[eventIndex]) {
-          console.log("No current event to swipe on release.");
+        if (!eventBeingSwiped || !currentUserIdAtRelease) {
+          console.log("No current event or user ID captured to swipe on release. Resetting position. Event:", eventBeingSwiped ? eventBeingSwiped.id : 'None', "UserID:", currentUserIdAtRelease);
           translateX.setValue(0);
+          setIsSwiping(false);
+          swipingEventRef.current = null;
           return;
         }
 
@@ -136,38 +183,39 @@ const EventSwipeScreen = () => {
         const shouldSwipeOff = Math.abs(gestureState.dx) > SWIPE_THRESHOLD;
 
         if (shouldSwipeOff) {
-          handleSwipeAnimationAndLogic(currentSwipeDirection);
+          // Pass the user ID directly
+          handleSwipeAnimationAndLogic(currentSwipeDirection, eventBeingSwiped, currentUserIdAtRelease);
         } else {
           Animated.spring(translateX, {
             toValue: 0,
             friction: 4,
             useNativeDriver: true,
-          }).start();
+          }).start(() => {
+            setIsSwiping(false);
+            swipingEventRef.current = null;
+          });
         }
       },
       onPanResponderTerminate: () => {
         setIsSwiping(false);
-        if (events[eventIndex]) {
-          Animated.spring(translateX, {
-            toValue: 0,
-            friction: 4,
-            useNativeDriver: true,
-          }).start();
-        }
+        swipingEventRef.current = null;
+        Animated.spring(translateX, {
+          toValue: 0,
+          friction: 4,
+          useNativeDriver: true,
+        }).start();
       },
     })
   ).current;
 
   // Helper function to process event data (extracted for reusability and clarity)
-  // This function fetches attendees and host profile info.
   const processEventData = useCallback(async (eventId, eventData) => {
     try {
-      // Fetch attendees (pending/attendees can be the same structure for simplicity here)
-      const attendeesRef = collection(db, 'live', eventId, 'pending'); // Or 'attendees' if you move accepted users there
+      const attendeesRef = collection(db, 'live', eventId, 'pending');
       const attendeesSnapshot = await getDocs(attendeesRef);
       const attendeePromises = attendeesSnapshot.docs.map(async attendeeDoc => {
         const attendeeId = attendeeDoc.data().userId;
-        if (!attendeeId) return null; // Skip if no userId
+        if (!attendeeId) return null;
 
         try {
           const profileInfoCollectionRef = collection(db, 'users', attendeeId, 'ProfileInfo');
@@ -182,7 +230,6 @@ const EventSwipeScreen = () => {
       });
       const attendeeProfiles = (await Promise.all(attendeePromises)).filter(Boolean);
 
-      // Fetch host info
       let hostInfo = null;
       if (eventData.host) {
         try {
@@ -210,7 +257,7 @@ const EventSwipeScreen = () => {
       console.error(`Error processing event ${eventId}:`, error);
       return null;
     }
-  }, []); // No dependencies as it uses db from closure and passes eventId/eventData
+  }, []);
 
   // Effect for Authentication State Changes
   useEffect(() => {
@@ -219,9 +266,9 @@ const EventSwipeScreen = () => {
         setCurrentUserId(user.uid);
       } else {
         setCurrentUserId(null);
-        setEvents([]); // Clear events if user logs out
+        setEvents([]);
         setEventIndex(0);
-        seenEventIdsRef.current.clear(); // Clear seen IDs too
+        seenEventIdsRef.current.clear();
         console.log("User logged out or no user found.");
       }
     });
@@ -235,36 +282,27 @@ const EventSwipeScreen = () => {
       return;
     }
 
-    // Unsubscribe functions for cleanup
-    let unsubscribeLiveEvents = () => {};
-    let unsubscribeRsvp = () => {};
-    let unsubscribeDeclined = () => {};
+    let unsubscribeLiveEvents = () => { };
+    let unsubscribeRsvp = () => { };
+    let unsubscribeDeclined = () => { };
 
-    // 1. Setup real-time listener for RSVP events
     unsubscribeRsvp = onSnapshot(collection(db, 'users', currentUserId, 'rsvp'), (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           seenEventIdsRef.current.add(change.doc.id);
-          // Filter out the event immediately from the visible stack
           setEvents(prevEvents => prevEvents.filter(event => event.id !== change.doc.id));
           console.log(`[RSVP Listener] Event ${change.doc.id} added to seen. Removed from stack.`);
         } else if (change.type === 'removed') {
           seenEventIdsRef.current.delete(change.doc.id);
-          // If you want to re-add, you'd need to re-fetch and add to events,
-          // but typically not needed for a swipe screen.
           console.log(`[RSVP Listener] Event ${change.doc.id} removed from seen.`);
         }
       });
-      // After any change, ensure our index is not out of bounds if events array shrunk
-      setEventIndex(prev => Math.min(prev, events.length > 0 ? events.length - 1 : 0));
     }, (error) => console.error("Error listening to RSVP events:", error));
 
-    // 2. Setup real-time listener for Declined events
     unsubscribeDeclined = onSnapshot(collection(db, 'users', currentUserId, 'declined'), (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
           seenEventIdsRef.current.add(change.doc.id);
-          // Filter out the event immediately from the visible stack
           setEvents(prevEvents => prevEvents.filter(event => event.id !== change.doc.id));
           console.log(`[Declined Listener] Event ${change.doc.id} added to seen. Removed from stack.`);
         } else if (change.type === 'removed') {
@@ -272,28 +310,22 @@ const EventSwipeScreen = () => {
           console.log(`[Declined Listener] Event ${change.doc.id} removed from seen.`);
         }
       });
-      setEventIndex(prev => Math.min(prev, events.length > 0 ? events.length - 1 : 0));
     }, (error) => console.error("Error listening to Declined events:", error));
 
-    // 3. Setup real-time listener for Live events
     unsubscribeLiveEvents = onSnapshot(collection(db, 'live'), async (snapshot) => {
       console.log('[Live Events Listener] Snapshot received.');
       const newProcessedEvents = [];
 
-      // Process only changes
       for (const docChange of snapshot.docChanges()) {
         const eventData = docChange.doc.data();
         const eventId = docChange.doc.id;
 
-        // Skip events hosted by the current user
         if (eventData.host === currentUserId) {
           console.log(`[Live Events Listener] Skipping self-hosted event: ${eventId}`);
           continue;
         }
 
-        // Handle 'added' and 'modified' events
         if (docChange.type === 'added' || docChange.type === 'modified') {
-          // Only consider if not already seen
           if (!seenEventIdsRef.current.has(eventId)) {
             const processedEvent = await processEventData(eventId, eventData);
             if (processedEvent) {
@@ -306,11 +338,9 @@ const EventSwipeScreen = () => {
             console.log(`[Live Events Listener] Event ${eventId} already seen by user. Skipping.`);
           }
         }
-        // Handle 'removed' events
         else if (docChange.type === 'removed') {
           setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
           console.log(`[Live Events Listener] Event ${eventId} removed from Firestore. Removing from stack.`);
-          // Remove from seen IDs if it was somehow in there (e.g., host deleted event after swipe)
           seenEventIdsRef.current.delete(eventId);
         }
       }
@@ -319,13 +349,11 @@ const EventSwipeScreen = () => {
         let updatedEvents = [...prevEvents];
         const prevEventIds = new Set(prevEvents.map(e => e.id));
 
-        // Add new/modified events if they are not already in the array
         newProcessedEvents.forEach(newEvent => {
           if (!prevEventIds.has(newEvent.id)) {
             updatedEvents.push(newEvent);
             console.log(`[Live Events Listener] Added new event to state: ${newEvent.id}`);
           } else {
-            // If it's a modified event, find it and update it
             const index = updatedEvents.findIndex(e => e.id === newEvent.id);
             if (index > -1) {
               updatedEvents[index] = newEvent;
@@ -334,8 +362,6 @@ const EventSwipeScreen = () => {
           }
         });
 
-        // Finally, filter out any events that are now in seenEventIdsRef or are self-hosted
-        // This ensures consistency after any internal state changes or external swipes.
         updatedEvents = updatedEvents.filter(event =>
           !seenEventIdsRef.current.has(event.id) && event.host !== currentUserId
         );
@@ -344,7 +370,6 @@ const EventSwipeScreen = () => {
         return updatedEvents;
       });
 
-      // Prefetch images for the next few events
       const PREFETCH_LIMIT = 5;
       snapshot.docs.slice(0, PREFETCH_LIMIT).forEach(eventDoc => {
         const eventToPreload = eventDoc.data();
@@ -353,34 +378,38 @@ const EventSwipeScreen = () => {
             if (uri) Image.prefetch(uri);
           });
         }
-        // Host and attendee profile images would also need to be preloaded here,
-        // but `processEventData` isn't fully integrated here for preloading specific URLs.
-        // This can be an enhancement later.
       });
 
     }, (error) => console.error("Error listening to live events:", error));
 
-    // Cleanup all listeners when currentUserId changes or component unmounts
     return () => {
       unsubscribeLiveEvents();
       unsubscribeRsvp();
       unsubscribeDeclined();
       console.log("All Firestore listeners unsubscribed.");
     };
-  }, [currentUserId, processEventData]); // Dependencies for this effect
+  }, [currentUserId, processEventData]);
 
-  // Ensure eventIndex stays valid if events array changes
   useEffect(() => {
-    if (eventIndex >= events.length && events.length > 0) {
-      setEventIndex(events.length - 1);
-    } else if (events.length === 0) {
+    if (events.length === 0) {
       setEventIndex(0);
+    } else if (eventIndex >= events.length) {
+      setEventIndex(events.length - 1);
     }
+    console.log(`[EventIndex Effect] Current Index: ${eventIndex}, Events Length: ${events.length}`);
   }, [events.length, eventIndex]);
 
 
   const currentEvent = events[eventIndex];
   const nextEvent = events[eventIndex + 1];
+
+  console.log('--- Render Cycle ---');
+  console.log('Events length:', events.length);
+  console.log('Event Index:', eventIndex);
+  console.log('Current Event:', currentEvent ? currentEvent.id : 'None');
+  console.log('Is Swiping Ref:', isSwipingRef.current);
+  console.log('Swiping Event Ref:', swipingEventRef.current ? swipingEventRef.current.id : 'None');
+  console.log('--------------------');
 
   const nextCardOpacity = translateX.interpolate({
     inputRange: [-width, 0, width],
@@ -431,7 +460,7 @@ const EventSwipeScreen = () => {
               <View style={[styles.actionButtonsInsideCard, { bottom: buttonBottomPosition }]}>
                 <TouchableOpacity
                   style={styles.iconButton}
-                  onPress={() => handleSwipe('left')}
+                  onPress={() => handleButtonSwipe('left')}
                   disabled={isSwipingRef.current}
                 >
                   <Image source={NoIcon} style={styles.iconImage} resizeMode="contain" />
@@ -439,7 +468,7 @@ const EventSwipeScreen = () => {
 
                 <TouchableOpacity
                   style={styles.iconButton}
-                  onPress={() => handleSwipe('right')}
+                  onPress={() => handleButtonSwipe('right')}
                   disabled={isSwipingRef.current}
                 >
                   <Image source={WaveIcon} style={styles.iconImage} resizeMode="contain" />
@@ -453,23 +482,16 @@ const EventSwipeScreen = () => {
         ) : (
           <View style={styles.endContainer}>
             <Text style={styles.doneText}>No more events</Text>
-            {/* Show reset button if there were events previously or new events can be added */}
             {(events.length === 0 && eventIndex === 0) ? (
               <Text style={styles.subText}>Check back later for new events!</Text>
             ) : (
-               // You can decide if you want a reset button in a live stream
-               // For a continuous stream, a reset button might not be meaningful.
-               // If you keep it, make sure it re-fetches or re-evaluates the stack.
-               // For now, let's assume it implies clearing and starting over.
-               <TouchableOpacity style={styles.resetButton} onPress={() => {
-                 setEvents([]);
-                 setEventIndex(0);
-                 seenEventIdsRef.current.clear();
-                 // Re-trigger fetch by briefly nulling then setting currentUserId, or adding a specific fetch function call
-                 // For now, relying on the listener to refill.
-               }}>
-                 <Text style={styles.resetButtonText}>Refresh Events</Text>
-               </TouchableOpacity>
+              <TouchableOpacity style={styles.resetButton} onPress={() => {
+                setEvents([]);
+                setEventIndex(0);
+                seenEventIdsRef.current.clear();
+              }}>
+                <Text style={styles.resetButtonText}>Refresh Events</Text>
+              </TouchableOpacity>
             )}
           </View>
         )}

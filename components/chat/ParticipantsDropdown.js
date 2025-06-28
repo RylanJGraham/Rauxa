@@ -1,4 +1,3 @@
-// components/chat/ParticipantsDropdown.js
 import React from 'react';
 import {
   View,
@@ -6,16 +5,16 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  // Removed Modal and TouchableWithoutFeedback as it's no longer a modal
+  Alert, // Added Alert for the Rauxa Admin message
 } from 'react-native';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-const ParticipantsDropdown = ({ onClose, participants }) => { // isVisible prop removed from destructuring
+// Add onSelectParticipant to props
+const ParticipantsDropdown = ({ onClose, participants, onSelectParticipant }) => {
   const participantsArray = participants || [];
 
   return (
-    // Replaced Modal with a View
     <View style={styles.dropdownContainer}>
       <View style={styles.dropdownHeader}>
         <Text style={styles.dropdownTitle}>Participants</Text>
@@ -27,7 +26,21 @@ const ParticipantsDropdown = ({ onClose, participants }) => { // isVisible prop 
         data={participantsArray}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.participantItem} onPress={onClose}> {/* Close on participant click too */}
+          // Call onSelectParticipant with the item data
+          <TouchableOpacity
+            style={styles.participantItem}
+            // Ensure the participant item is clickable and passes its full data
+            onPress={() => {
+              // Directly call onSelectParticipant from props
+              if (onSelectParticipant) {
+                onSelectParticipant(item);
+              } else {
+                // Fallback for debugging or if prop isn't provided
+                console.warn("onSelectParticipant prop not provided to ParticipantsDropdown");
+                Alert.alert("Debug", `Selected: ${item.displayName}`);
+              }
+            }}
+          >
             {item.profileImage ? (
               <Image
                 source={{ uri: item.profileImage }}

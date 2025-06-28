@@ -39,8 +39,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import ParticipantsDropdown from '../components/chat/ParticipantsDropdown';
 import EventDetailsOverlay from '../components/chat/EventDetailsOverlay';
+// Import the ProfileGalleryOverlay component
+import ProfileGalleryOverlay from '../components/hub/ProfileGalleryOverlay'; // Adjust path if necessary
 
-const MESSAGES_PER_LOAD = 20;
+const MESSAGES_PER_LOAD = 80;
 
 const ChatDetailScreen = ({ route, navigation }) => {
   const { chatId, eventId: initialEventId } = route.params || {};
@@ -60,8 +62,13 @@ const ChatDetailScreen = ({ route, navigation }) => {
   const [isEventDetailsOverlayVisible, setIsEventDetailsOverlayVisible] = useState(false);
   const [chatEventId, setChatEventId] = useState(null);
   const [fetchedEventData, setFetchedEventData] = useState(null);
-  const [eventHostId, setEventHostId] = useState(null); // <--- NEW STATE: To store the event host's UID
+  const [eventHostId, setEventHostId] = useState(null);
   const flatListRef = useRef(null);
+
+  // New state for ProfileGalleryOverlay
+  const [showProfileGalleryOverlay, setShowProfileGalleryOverlay] = useState(false);
+  const [selectedProfileForGallery, setSelectedProfileForGallery] = useState(null);
+
 
   useEffect(() => {
     if (!chatId) {
@@ -123,7 +130,7 @@ const ChatDetailScreen = ({ route, navigation }) => {
     }
   }, [chatId, currentUserId]);
 
-  // MODIFIED: Fetch Chat Details, Participant Info, Event Header Image/Name, and Event Host ID
+  // Fetch Chat Details, Participant Info, Event Header Image/Name, and Event Host ID
   useEffect(() => {
     if (!currentUserId || !chatId) return;
 
@@ -143,10 +150,13 @@ const ChatDetailScreen = ({ route, navigation }) => {
             firstName: "Rauxa",
             lastName: "Admin",
             profileImage: require('../assets/onboarding/Onboarding1.png'),
+            // Add full profile images for system if it ever had them, otherwise keep empty array
+            profileImages: [], 
           };
 
           for (const pId of participantIds) {
             if (!fetchedInfo[pId]) {
+              // Fetch user profile information including all profileImages
               const profileRef = doc(db, "users", pId, "ProfileInfo", "userinfo");
               const profileSnap = await getDoc(profileRef);
               if (profileSnap.exists()) {
@@ -156,9 +166,20 @@ const ChatDetailScreen = ({ route, navigation }) => {
                   displayName: profileData.displayFirstName ||
                     profileData.name ||
                     "Unknown User",
-                  firstName: profileData.displayFirstName || "",
+                  firstName: profileData.displayFirstName || profileData.name?.split(' ')[0] || "",
                   lastName: profileData.name?.split(' ').length > 1 ? profileData.name.split(' ')[1] : "",
-                  profileImage: profileData.profileImages?.[0] || null,
+                  displayFirstName: profileData.displayFirstName || '', // Add this line
+                  displayLastName: profileData.displayLastName || '',   // Add this line
+                  profileImage: profileData.profileImages?.[0] || null, // First image as main profile image
+                  profileImages: profileData.profileImages || [], // All profile images for the gallery
+                  // Also include other data needed for the profile gallery:
+                  age: profileData.age || 'N/A',
+                  gender: profileData.gender || 'N/A',
+                  bio: profileData.bio || 'No bio available.',
+                  education: profileData.education || {},
+                  languages: profileData.languages || [],
+                  interests: profileData.interests || [],
+                  topSongs: profileData.topSongs || [],
                 };
               } else {
                 fetchedInfo[pId] = {
@@ -166,7 +187,12 @@ const ChatDetailScreen = ({ route, navigation }) => {
                   displayName: `User ${pId.substring(0, 4)}...`,
                   firstName: `User`,
                   lastName: `${pId.substring(0, 4)}...`,
+                  displayFirstName: `User ${pId.substring(0, 4)}`, // Also add to fallback
+                  displayLastName: '',                              // Also add to fallback
                   profileImage: null,
+                  profileImages: [],
+                  age: 'N/A', gender: 'N/A', bio: 'Profile not available.',
+                  education: {}, languages: [], interests: [], topSongs: [],
                 };
               }
             }
@@ -188,18 +214,18 @@ const ChatDetailScreen = ({ route, navigation }) => {
               if (eventData.photos && eventData.photos.length > 0) {
                 setEventHeaderImageUrl(eventData.photos[0]);
               }
-              setEventHostId(eventData.host); // <--- NEW: Set the event host ID
+              setEventHostId(eventData.host);
               console.log(`ChatDetailScreen: Event host ID for ${currentEventId}: ${eventData.host}`);
             } else {
               console.warn(`Event ${currentEventId} not found for chat ${chatId}.`);
               setHeaderEventName("Event Not Found");
               setFetchedEventData(null);
-              setEventHostId(null); // <--- NEW: Clear host ID if event not found
+              setEventHostId(null);
             }
           } else {
             setHeaderEventName(chatData.name || "Direct Chat");
             setFetchedEventData(null);
-            setEventHostId(null); // <--- NEW: Clear host ID for direct chats
+            setEventHostId(null);
           }
 
         } else {
@@ -285,6 +311,10 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     if (flatListRef.current && messages.length > 0) {
+      // Only scroll to end if it's a new message, not when loading older ones.
+      // A simple way is to check if the last message sender is the current user.
+      // For more robust behavior, you might need a flag when sending.
+      // For now, this will scroll on any message update.
       setTimeout(() => {
         flatListRef.current.scrollToEnd({ animated: true });
       }, 50);
@@ -328,72 +358,26 @@ const ChatDetailScreen = ({ route, navigation }) => {
     navigation.navigate('CreateMeetupScreen', { type, eventData });
   };
 
-  const handleLeaveGroupChat = useCallback(() => {
-    Alert.alert(
-      "Leave Chat",
-      "Are you sure you want to leave this chat? You will be removed from the conversation and, if this is an event-related chat, un-RSVP'd from the event.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Leave",
-          onPress: async () => {
-            if (!currentUserId) {
-              Alert.alert("Error", "You must be logged in to leave a chat.");
-              return;
-            }
-            if (!chatId) {
-                Alert.alert("Error", "Chat information is missing.");
-                return;
-            }
+  // Handler for when a participant is selected from the dropdown
+  const handleSelectParticipant = useCallback((participant) => {
+    // Only show the gallery if the participant has images and is not the 'system' user
+    if (participant.id !== "system" && participant.profileImages && participant.profileImages.length > 0) {
+      setSelectedProfileForGallery(participant);
+      setShowProfileGalleryOverlay(true);
+    } else if (participant.id === "system") {
+      Alert.alert("Rauxa Admin", "This is the Rauxa Admin. There's no profile to view here.");
+    } else {
+      Alert.alert("No Profile Images", `${participant.displayName} does not have any profile images to display.`);
+    }
+    setIsParticipantsDropdownVisible(false); // Close the dropdown regardless
+  }, []);
 
-            try {
-              // 1. Remove user from chat's participants array
-              const chatDocRef = doc(db, 'chats', chatId);
-              await updateDoc(chatDocRef, {
-                participants: arrayRemove(currentUserId),
-              });
-              console.log(`User ${currentUserId} removed from chat ${chatId} participants.`);
+  // Handler to close the ProfileGalleryOverlay
+  const handleCloseProfileGallery = useCallback(() => {
+    setShowProfileGalleryOverlay(false);
+    setSelectedProfileForGallery(null);
+  }, []);
 
-              // 2. Remove user's 'new' status for this chat (cleanup)
-              const userSeenStatusRef = doc(db, "chats", chatId, "new", currentUserId);
-              const userSeenStatusSnap = await getDoc(userSeenStatusRef);
-              if (userSeenStatusSnap.exists()) {
-                await deleteDoc(userSeenStatusRef);
-                console.log(`User ${currentUserId} 'new' status removed for chat ${chatId}.`);
-              }
-
-              // 3. Delete attendee document if eventId exists (from chatEventId state)
-              if (chatEventId) { // Use chatEventId which is derived from chatDoc.eventId
-                const attendeeDocRef = doc(db, 'live', chatEventId, 'attendees', currentUserId);
-                const attendeeSnap = await getDoc(attendeeDocRef);
-                if (attendeeSnap.exists()) {
-                  await deleteDoc(attendeeDocRef);
-                  console.log(`User ${currentUserId} attendee doc deleted for event ${chatEventId}.`);
-                } else {
-                  console.log(`No attendee doc found for ${currentUserId} in event ${chatEventId}.`);
-                }
-              }
-
-              Alert.alert("Success", "You have left the chat.");
-              navigation.goBack();
-            } catch (error) {
-              console.error("Error leaving chat:", error);
-              Alert.alert("Error", `Failed to leave chat: ${error.message || 'An unknown error occurred'}. Please try again.`);
-            }
-          },
-          style: "destructive",
-        },
-      ],
-      { cancelable: true }
-    );
-  }, [chatId, currentUserId, chatEventId, navigation]);
-
-  // Determine if the current user is the host
-  const isCurrentUserHost = currentUserId && eventHostId && currentUserId === eventHostId;
-  const showLeaveButton = !isCurrentUserHost; // Only show if not the host
 
   if (loading || !chatId) {
     return (
@@ -436,15 +420,6 @@ const ChatDetailScreen = ({ route, navigation }) => {
         >
           <Ionicons name="people" size={28} color="#FFD700" />
         </TouchableOpacity>
-        {/* MODIFIED: Conditionally render the Leave Chat Button */}
-        {showLeaveButton && (
-          <TouchableOpacity
-            onPress={handleLeaveGroupChat}
-            style={styles.leaveChatButton}
-          >
-            <Ionicons name="exit" size={24} color="#D9043D" />
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Messages List */}
@@ -485,6 +460,7 @@ const ChatDetailScreen = ({ route, navigation }) => {
           <ParticipantsDropdown
             onClose={() => setIsParticipantsDropdownVisible(false)}
             participants={Object.values(participantsInfo)}
+            onSelectParticipant={handleSelectParticipant} // Pass the new handler
           />
         </View>
       )}
@@ -495,6 +471,14 @@ const ChatDetailScreen = ({ route, navigation }) => {
           eventId={chatEventId}
           onClose={() => setIsEventDetailsOverlayVisible(false)}
           onOpenCreateMeetupModal={handleOpenCreateMeetupModal}
+        />
+      )}
+
+      {/* Profile Gallery Overlay (conditionally rendered) */}
+      {showProfileGalleryOverlay && selectedProfileForGallery && (
+        <ProfileGalleryOverlay
+          profileData={selectedProfileForGallery}
+          onClose={handleCloseProfileGallery}
         />
       )}
     </LinearGradient>
@@ -556,10 +540,6 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'left',
     marginRight: 10,
-  },
-  leaveChatButton: {
-    paddingHorizontal: 5,
-    paddingVertical: 5,
   },
   messagesList: {
     flex: 1,
