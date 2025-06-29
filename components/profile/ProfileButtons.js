@@ -2,51 +2,56 @@ import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-// Add handleOpenSettingsModal to the destructured props
 const ProfileButtons = ({ setViewMode, viewMode, handleLogout, handleOpenSettingsModal }) => (
-    <View style={styles.buttonRow}>
+    <View style={styles.buttonRowContainer}> {/* New container to center the row */}
+        <View style={styles.buttonRow}>
 
-        {/* Settings Button (Left) - NOW CALLS handleOpenSettingsModal */}
-        <TouchableOpacity style={styles.iconButton} onPress={handleOpenSettingsModal}>
-            <Ionicons name="settings-outline" size={24} color="white" />
-        </TouchableOpacity>
-
-        {/* Centered Profile Toggle Buttons */}
-        <View style={styles.profileToggleWrapper}>
-            <TouchableOpacity
-                onPress={() => setViewMode('profile')}
-                style={[styles.toggleButton, viewMode === 'profile' && styles.activeButton]}>
-                <Ionicons name="eye-outline" size={18} color="white" />
-                <Text style={styles.buttonText}>View</Text>
+            {/* Settings Button (Left) */}
+            <TouchableOpacity style={[styles.iconButton, { backgroundColor: styles.profileToggleWrapper.backgroundColor }]} onPress={handleOpenSettingsModal}>
+                <Ionicons name="settings-outline" size={24} color="white" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-                onPress={() => setViewMode('edit')}
-                style={[styles.toggleButton, viewMode === 'edit' && styles.activeButton]}>
-                <Ionicons name="pencil-outline" size={18} color="white" />
-                <Text style={styles.buttonText}>Edit</Text>
+            {/* Centered Profile Toggle Buttons */}
+            <View style={styles.profileToggleWrapper}>
+                <TouchableOpacity
+                    onPress={() => setViewMode('profile')}
+                    style={[styles.toggleButton, viewMode === 'profile' && styles.activeButton]}>
+                    <Ionicons name="eye-outline" size={18} color="white" />
+                    <Text style={styles.buttonText}>View</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={() => setViewMode('edit')}
+                    style={[styles.toggleButton, viewMode === 'edit' && styles.activeButton]}>
+                    <Ionicons name="pencil-outline" size={18} color="white" />
+                    <Text style={styles.buttonText}>Edit</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Logout Button (Right) */}
+            <TouchableOpacity style={[styles.iconButton, { backgroundColor: styles.profileToggleWrapper.backgroundColor }]} onPress={handleLogout}>
+                <Ionicons name="log-out-outline" size={24} color="white" />
             </TouchableOpacity>
+
         </View>
-
-        {/* Logout Button (Right) */}
-        <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="white" />
-        </TouchableOpacity>
-
-    </View>
+    </View> // Close the new container
 );
 
 const styles = StyleSheet.create({
+    buttonRowContainer: {
+        // This new container takes full width and centers its child (`buttonRow`)
+        width: '100%',
+        alignItems: 'center', // Centers the content horizontally
+    },
     buttonRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        width: '100%',
+        width: '80%', // The row itself still takes 80% width
     },
     iconButton: {
-        backgroundColor: '#0367A6',
-        padding: 10,
-        borderRadius: 25,
+        padding: 6,
+        borderRadius: 10,
         alignItems: "center",
         justifyContent: "center",
         shadowColor: "#000",

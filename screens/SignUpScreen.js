@@ -20,8 +20,7 @@ import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firesto
 
 const SignUpScreen = () => {
     const navigation = useNavigation();
-    // Destructure only Google and GitHub sign-in methods
-    const { signInWithGoogle, signInWithGithub } = useAuth(); // <-- REMOVED signInWithFacebook
+    const { signInWithGoogle, signInWithGithub } = useAuth();
 
     // State variables for form inputs
     const [username, setUsername] = useState('');
@@ -29,13 +28,16 @@ const SignUpScreen = () => {
     const [mobile, setMobile] = useState('');
     const [password, setPassword] = useState('');
 
+    // Define a generic "coming soon" alert function
+    const showComingSoonAlert = (methodName) => {
+        Alert.alert("Coming Soon", `${methodName} Sign-In is in progress and not yet implemented.`);
+    };
+
     const socialIcons = [
-        { name: 'Apple', icon: require('../assets/login/apps/apple.png'), action: () => Alert.alert("Coming Soon", "Apple Sign-In is not yet implemented.") },
-        { name: 'Google', icon: require('../assets/login/apps/google.png'), action: signInWithGoogle },
-        // Removed Facebook social icon:
-        // { name: 'Facebook', icon: require('../assets/login/apps/facebook.png'), action: signInWithFacebook }, 
-        { name: 'GitHub', icon: require('../assets/login/apps/github.png'), action: signInWithGithub },
-        { name: 'X', icon: require('../assets/login/apps/x.png'), action: () => Alert.alert("Coming Soon", "X (Twitter) Sign-In is not yet implemented.") },
+        { name: 'Apple', icon: require('../assets/login/apps/apple.png'), action: () => showComingSoonAlert('Apple') },
+        { name: 'Google', icon: require('../assets/login/apps/google.png'), action: () => showComingSoonAlert('Google') }, // Changed to "Coming Soon"
+        { name: 'GitHub', icon: require('../assets/login/apps/github.png'), action: () => showComingSoonAlert('GitHub') }, // Changed to "Coming Soon"
+        { name: 'X', icon: require('../assets/login/apps/x.png'), action: () => showComingSoonAlert('X (Twitter)') },
     ];
 
     const handleSignUp = async () => {
