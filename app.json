@@ -1,74 +1,80 @@
 {
-    "expo": {
-        "name": "Rauxa",
-        "slug": "rauxa",
-        "version": "1.0.0",
-        "orientation": "portrait",
-        "icon": "./assets/onboarding/Onboarding1.png",
-        "userInterfaceStyle": "light",
-        "splash": {
-            "image": "./assets/icon.png",
-            "resizeMode": "contain",
-            "backgroundColor": "#000000"
-        },
-        "assetBundlePatterns": [
-            "**/*"
+  "expo": {
+    "name": "Rauxa",
+    "slug": "rauxa",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/onboarding/Onboarding1.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "scheme": "rauxa",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.rauxa",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app uses location services to find events near you.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to allow you to select images for your event posts.",
+        "NSPhotoLibraryAddUsageDescription": "This app needs to save photos to your library, for example, to store event images for offline use.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.312076107505-7laayc3v1w8o494h4w5j2f1b0a9z0y2x"
+            ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.312076107505-7laayc3v1w8o494h4w5j2f1b0a9z0y2x"
+            ]
+          }
         ],
-        "scheme": "rauxa",
-        "ios": {
-            "supportsTablet": true,
-            "bundleIdentifier": "com.yourcompany.rauxa",
-            "googleServicesFile": "./GoogleService-Info.plist",
-            "infoPlist": {
-                "NSLocationWhenInUseUsageDescription": "This app uses location services to find events near you.",
-                "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to allow you to select images for your event posts.",
-                "NSPhotoLibraryAddUsageDescription": "This app needs to save photos to your library, for example, to store event images for offline use.",
-                "CFBundleURLTypes": [
-                    {
-                        "CFBundleURLSchemes": [
-                            "com.googleusercontent.apps.312076107505-7laayc3v1w8o494h4w5j2f1b0a9z0y2x"
-                        ]
-                    }
-                ]
-            },
-            "runtimeVersion": {
-                "policy": "appVersion"
-            }
-        },
-        "android": {
-            "adaptiveIcon": {
-                "foregroundImage": "./assets/onboarding/Onboarding1.png",
-                "backgroundColor": "#000000"
-            },
-            "package": "com.yourcompany.rauxa",
-            "runtimeVersion": "1.0.0"
-        },
-        "web": {
-            "favicon": "./assets/onboarding/Onboarding1.png",
-            "config": {
-                "firebase": {
-                    "apiKey": "AIzaSyDotWj51D4OSUrtjb0ncA7Igo7Q6zgTu1M",
-                    "authDomain": "rauxa-8f9bf.firebaseapp.com",
-                    "projectId": "rauxa-8f9bf",
-                    "storageBucket": "rauxa-8f9bf.firebasestorage.app",
-                    "messagingSenderId": "312076107505",
-                    "appId": "1:312076107505:web:bbbcbe990b29068210f350"
-                }
-            }
-        },
-        "extra": {
-            "webClientId": "312076107505-d1hljntsofa7bsb2nucue7rvqi9vnq18.apps.googleusercontent.com",
-            "androidClientId": "312076107505-v1iq4lgs0k1d8r9t7u6c5b2a3z0y1x2w.apps.googleusercontent.com",
-            "iosClientId": "312076107505-7laayc3v1w8o494h4w5j2f1b0a9z0y1x2w.apps.googleusercontent.com",
-            "githubClientId": "Ov23lig4fima7leyQG2B",
-            "githubClientSecret": "1ca016953a8ae96576d2930bb35feb3048d843ae",
-            "eas": {
-                "projectId": "8992777b-78d8-475d-bb83-21aa5d3b576e"
-            }
-        },
-        "plugins": [],
-        "updates": {
-            "url": "https://u.expo.dev/8992777b-78d8-475d-bb83-21aa5d3b576e"
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/onboarding/Onboarding1.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.yourcompany.rauxa",
+      "runtimeVersion": "1.0.0"
+    },
+    "web": {
+      "favicon": "./assets/onboarding/Onboarding1.png",
+      "config": {
+        "firebase": {
+          "apiKey": "AIzaSyDotWj51D4OSUrtjb0ncA7Igo7Q6zgTu1M",
+          "authDomain": "rauxa-8f9bf.firebaseapp.com",
+          "projectId": "rauxa-8f9bf",
+          "storageBucket": "rauxa-8f9bf.firebasestorage.app",
+          "messagingSenderId": "312076107505",
+          "appId": "1:312076107505:web:bbbcbe990b29068210f350"
         }
+      }
+    },
+    "extra": {
+      "webClientId": "312076107505-d1hljntsofa7bsb2nucue7rvqi9vnq18.apps.googleusercontent.com",
+      "androidClientId": "312076107505-v1iq4lgs0k1d8r9t7u6c5b2a3z0y1x2w.apps.googleusercontent.com",
+      "iosClientId": "312076107505-7laayc3v1w8o494h4w5j2f1b0a9z0y1x2w.apps.googleusercontent.com",
+      "githubClientId": "Ov23lig4fima7leyQG2B",
+      "githubClientSecret": "1ca016953a8ae96576d2930bb35feb3048d843ae",
+      "eas": {
+        "projectId": "8992777b-78d8-475d-bb83-21aa5d3b576e"
+      }
+    },
+    "plugins": [],
+    "updates": {
+      "url": "https://u.expo.dev/8992777b-78d8-475d-bb83-21aa5d3b576e"
     }
+  }
 }

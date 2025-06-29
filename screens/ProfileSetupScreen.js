@@ -623,15 +623,16 @@ const styles = StyleSheet.create({
         width: "100%", // Ensure it takes full width to align text within
     },
     prompt: {
-        fontSize: 24,
-        fontWeight: "bold",
-        color: "#fff",
-        paddingHorizontal: 40,
-        marginTop: 5,
-        marginBottom: 10,
-        textAlign: "left",
-        alignSelf: 'flex-start',
-    },
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#fff",
+    paddingHorizontal: 40,
+    marginTop: 5,
+    marginBottom: 10,
+    textAlign: "left",
+    // REMOVE THIS LINE: alignSelf: 'flex-start',
+    width: '100%', // Add this to ensure it takes full width for text alignment
+},
     subtitle: {
         fontSize: 14,
         color: "#F2F2F2",
