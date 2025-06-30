@@ -88,7 +88,15 @@ Start the app with Expo CLI:
  ```bash
 expo start
 ```
-This will open the Expo developer tools in your browser. Scan the QR code with the Expo Go app on your mobile device or press i for iOS simulator or a for Android emulator to view the app locally.
+This command will open the Expo developer tools in your browser, typically starting a development server. If the app doesn't automatically open on your device, ensure it's running in Expo Go mode by pressing s in your terminal after expo start.
+
+Once the development server is running and the QR code is displayed in your terminal or browser:
+
+On your mobile device: Open the Expo Go app and scan the QR code.
+
+Alternatively (iOS and some Androids): Use your device's default camera app to scan the QR code. It should prompt you to open the project in Expo Go.
+
+You can also press i for an iOS simulator or a for an Android emulator to view the app locally on your computer.
 
 ## 📄 License
 This project is licensed under the MIT License - see the LICENSE file for details.
